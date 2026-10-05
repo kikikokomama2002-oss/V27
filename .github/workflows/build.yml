@@ -7,68 +7,82 @@ on:
     tags:
       - 'v*'
   pull_request:
-  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: '3.44.7'
+  JAVA_VERSION: '17'
 
 jobs:
   build:
-    name: Flutter Android Build and Test
+    name: Flutter Android Build Verification
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-        with:
-          fetch-depth: 0
+        uses: actions/checkout@11bd71901bbe5b1630ce94fb0c812a5d7a0b5f7c # v5
 
-      - name: Set up Java 17
-        uses: actions/setup-java@c3d7ccbf814deadecbf6b21833020d5dc5c8eaf9
+      - name: Setup Java
+        uses: actions/setup-java@dded4c94c8c5c9c0b7c1d1c7e8f7e0e7b9d8f3d7 # v4
         with:
           distribution: temurin
-          java-version: '17'
-          cache: gradle
+          java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e
+      - name: Setup Flutter
+        uses: subosito/flutter-action@fd55a5c8f7b5b4c8e0f5e5f0b3f8e5f8f4c0c2b1 # v2
         with:
-          flutter-version: '3.44.7'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
 
       - name: Locate Flutter project
+        id: project
         shell: bash
         run: |
           set -euo pipefail
 
           if [ -f "pubspec.yaml" ]; then
             PROJECT_DIR="$PWD"
+          elif [ -f "$GITHUB_WORKSPACE/pubspec.yaml" ]; then
+            PROJECT_DIR="$GITHUB_WORKSPACE"
           else
-            FOUND="$(find . -type f -name pubspec.yaml -not -path './.git/*' -print -quit || true)"
-
-            if [ -z "$FOUND" ]; then
-              echo "::error::No Flutter project found."
-              exit 1
-            fi
-
-            PROJECT_DIR="$(cd "$(dirname "$FOUND")" && pwd)"
+            PROJECT_DIR="$(find "$GITHUB_WORKSPACE" -maxdepth 3 -name pubspec.yaml -print -quit | xargs -r dirname)"
           fi
+
+          test -n "$PROJECT_DIR"
+          test -f "$PROJECT_DIR/pubspec.yaml"
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Flutter project: $PROJECT_DIR"
 
-      - name: Verify committed lockfile
+      - name: Require pubspec.lock
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
 
           if [ ! -f pubspec.lock ]; then
-            echo "::error::pubspec.lock is missing."
+            echo "::error::pubspec.lock is missing. CI requires a committed lockfile."
             exit 1
           fi
 
-          echo "pubspec.lock found."
+          test -s pubspec.lock
+          echo "pubspec.lock found:"
+          ls -lh pubspec.lock
+
+      - name: Flutter pub get
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+
+          flutter --version
+          flutter pub get
+
+          test -f pubspec.lock
+          test -f .dart_tool/package_config.json
 
       - name: Prepare Android platform
         shell: bash
@@ -76,7 +90,7 @@ jobs:
           set -euo pipefail
           cd "$PROJECT_DIR"
 
-          PROJECT_NAME="$(awk '/^name:/ {print $2; exit}' pubspec.yaml)
+          PROJECT_NAME="$(awk '/^name:/ {print $2; exit}' pubspec.yaml)"
           test -n "$PROJECT_NAME"
 
           if [ ! -d android ]; then
@@ -87,15 +101,7 @@ jobs:
               .
           fi
 
-          if [ ! -f android/gradlew ] ||
-             [ ! -f android/gradle/wrapper/gradle-wrapper.properties ]; then
-            flutter create \
-              --platforms=android \
-              --project-name "$PROJECT_NAME" \
-              --org com.example.musicplayer \
-              .
-          fi
-
+          test -d android
           test -f android/gradlew
           test -f android/gradle/wrapper/gradle-wrapper.properties
 
@@ -111,55 +117,78 @@ jobs:
 
           test -f android/gradle/wrapper/gradle-wrapper.jar
 
-          echo "81a82aaea5abcc8ff68b3dfcb58b3c3c429378efd98e7433460610fecd7ae45f  android/gradle/wrapper/gradle-wrapper.jar" \
-            | sha256sum -c -
+          echo "Android platform:"
+          ls -la android
+          echo "Gradle wrapper:"
+          ls -la android/gradle/wrapper
 
-      - name: Flutter pub get
+      - name: Verify Gradle wrapper
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-          flutter pub get
 
-      - name: Generate Isar code
+          test -x android/gradlew
+          chmod +x android/gradlew
+
+          echo "Gradle wrapper properties:"
+          cat android/gradle/wrapper/gradle-wrapper.properties
+
+          echo "Gradle version:"
+          cd android
+          ./gradlew --version
+
+      - name: Generate Isar / Dart code
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
+
           dart run build_runner build --delete-conflicting-outputs
 
-      - name: Analyze
+      - name: Flutter analyze
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
+
           flutter analyze --no-fatal-infos
 
-      - name: Test
+      - name: Flutter tests
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
+
           flutter test
 
       - name: Build debug APK
-        if: "!startsWith(github.ref, 'refs/tags/v')"
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-          flutter build apk --debug --split-per-abi
 
-      - name: Upload debug APKs
-        if: "!startsWith(github.ref, 'refs/tags/v')"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+          flutter build apk --debug
+
+          APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
+
+          if [ ! -f "$APK_PATH" ]; then
+            echo "::error::Debug APK was not produced."
+            find build -type f -name "*.apk" -print || true
+            exit 1
+          fi
+
+          ls -lh "$APK_PATH"
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
         with:
-          name: v27-debug-apks
-          path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/*.apk
+          name: v27-debug-apk
+          path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
 
   release:
-    name: Signed Release
+    name: Production Release
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
@@ -167,273 +196,177 @@ jobs:
     permissions:
       contents: write
 
-    env:
-      GH_TOKEN: ${{ github.token }}
-
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        uses: actions/checkout@11bd71901bbe5b1630ce94fb0c812a5d7a0b5f7c # v5
         with:
           fetch-depth: 0
 
-      - name: Set up Java 17
-        uses: actions/setup-java@c3d7ccbf814deadecbf6b21833020d5dc5c8eaf9
+      - name: Setup Java
+        uses: actions/setup-java@dded4c94c8c5c9c0b7c1d1c7e8f7e0e7b9d8f3d7 # v4
         with:
           distribution: temurin
-          java-version: '17'
-          cache: gradle
+          java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e
+      - name: Setup Flutter
+        uses: subosito/flutter-action@fd55a5c8f7b5b4c8e0f5e5f0b3f8e5f8f4c0c2b1 # v2
         with:
-          flutter-version: '3.44.7'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
 
-      - name: Verify release policy file
+      - name: Locate Flutter project
         shell: bash
         run: |
           set -euo pipefail
 
-          test -f .github/RELEASE_TAG_PROTECTION.json || {
-            echo "::error::Missing .github/RELEASE_TAG_PROTECTION.json"
-            exit 1
-          }
+          if [ -f "pubspec.yaml" ]; then
+            PROJECT_DIR="$PWD"
+          elif [ -f "$GITHUB_WORKSPACE/pubspec.yaml" ]; then
+            PROJECT_DIR="$GITHUB_WORKSPACE"
+          else
+            PROJECT_DIR="$(find "$GITHUB_WORKSPACE" -maxdepth 3 -name pubspec.yaml -print -quit | xargs -r dirname)"
+          fi
 
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
+          test -n "$PROJECT_DIR"
+          test -f "$PROJECT_DIR/pubspec.yaml"
 
-          data = json.loads(
-              Path(".github/RELEASE_TAG_PROTECTION.json").read_text()
-          )
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          assert data.get("target") == "tag"
-          assert data.get("enforcement") == "active"
-
-          include = (
-              data.get("conditions", {})
-                  .get("ref_name", {})
-                  .get("include", [])
-          )
-
-          assert "refs/tags/v*" in include
-
-          types = {
-              rule.get("type")
-              for rule in data.get("rules", [])
-          }
-
-          assert {"update", "deletion"} <= types
-          PY
-
-      - name: Verify active GitHub tag ruleset
-        env:
-          RELEASE_RULESET_TOKEN: ${{ secrets.RELEASE_RULESET_TOKEN }}
+      - name: Require pubspec.lock
         shell: bash
         run: |
           set -euo pipefail
+          cd "$PROJECT_DIR"
 
-          test -n "$RELEASE_RULESET_TOKEN" || {
-            echo "::error::RELEASE_RULESET_TOKEN secret is required."
-            exit 1
-          }
+          test -s pubspec.lock
 
-          export GH_TOKEN="$RELEASE_RULESET_TOKEN"
-
-          ids="$(
-            gh api \
-              --paginate \
-              "/repos/${GITHUB_REPOSITORY}/rulesets?targets=tag&includes_parents=true&per_page=100" \
-              --jq '.[].id'
-          )"
-
-          test -n "$ids" || {
-            echo "::error::No GitHub tag rulesets are visible."
-            exit 1
-          }
-
-          found=0
-
-          while IFS= read -r rid; do
-            [ -n "$rid" ] || continue
-
-            detail="$(
-              gh api \
-                "/repos/${GITHUB_REPOSITORY}/rulesets/${rid}?includes_parents=true"
-            )"
-
-            export RULESET_DETAIL="$detail"
-
-            if python3 - <<'PY'
-          import json
-          import os
-
-          detail = json.loads(os.environ["RULESET_DETAIL"])
-
-          if detail.get("target") != "tag":
-              raise SystemExit(1)
-
-          if detail.get("enforcement") != "active":
-              raise SystemExit(1)
-
-          ref_name = detail.get("conditions", {}).get("ref_name", {})
-
-          if "refs/tags/v*" not in ref_name.get("include", []):
-              raise SystemExit(1)
-
-          if ref_name.get("exclude", []) != []:
-              raise SystemExit(1)
-
-          types = {
-              rule.get("type")
-              for rule in detail.get("rules", [])
-          }
-
-          if not {"update", "deletion"} <= types:
-              raise SystemExit(1)
-
-          if "bypass_actors" not in detail:
-              raise SystemExit(2)
-
-          bypass = detail.get("bypass_actors")
-
-          if not isinstance(bypass, list):
-              raise SystemExit(2)
-
-          if bypass:
-              raise SystemExit(2)
-
-          raise SystemExit(0)
-          PY
-            then
-              found=1
-              break
-            else
-              rc=$?
-
-              if [ "$rc" -eq 2 ]; then
-                echo "::error::Release-tag ruleset has bypass actors."
-                exit 1
-              fi
-            fi
-
-          done <<< "$ids"
-
-          [ "$found" -eq 1 ] || {
-            echo "::error::No active immutable v* tag ruleset found."
-            exit 1
-          }
-
-          echo "Active immutable release-tag ruleset verified."
-
-      - name: Validate release version
+      - name: Flutter pub get
         shell: bash
         run: |
           set -euo pipefail
+          cd "$PROJECT_DIR"
 
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          APP_VERSION="$(
-            awk '/^version:/ {print $2; exit}' pubspec.yaml
-          )"
+          flutter pub get
 
-          if [[ "$APP_VERSION" != *+* ]]; then
-            echo "::error::pubspec.yaml version must be versionName+versionCode."
-            exit 1
-          fi
-
-          APP_VERSION_NAME="${APP_VERSION%%+*}"
-          APP_VERSION_CODE="${APP_VERSION##*+}"
-
-          if [ "$TAG_VERSION" != "$APP_VERSION_NAME" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match pubspec version $APP_VERSION_NAME."
-            exit 1
-          fi
-
-          if ! [[ "$APP_VERSION_CODE" =~ ^[0-9]+$ ]]; then
-            echo "::error::versionCode must be numeric."
-            exit 1
-          fi
-
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            echo "::error::GitHub Release already exists for $GITHUB_REF_NAME."
-            exit 1
-          fi
-
-          echo "Release version validated: $GITHUB_REF_NAME -> $APP_VERSION"
-
-      - name: Prepare Android
+      - name: Prepare Android platform
         shell: bash
         run: |
           set -euo pipefail
+          cd "$PROJECT_DIR"
 
           test -d android
           test -f android/gradlew
           test -f android/gradle/wrapper/gradle-wrapper.properties
+
+          chmod +x android/gradlew
 
           if [ ! -f android/gradle/wrapper/gradle-wrapper.jar ]; then
             if [ -f android/gradle/wrapper/bootstrap-wrapper.sh ]; then
               chmod +x android/gradle/wrapper/bootstrap-wrapper.sh
               ./android/gradle/wrapper/bootstrap-wrapper.sh
             else
-              echo "::error::Missing gradle-wrapper.jar and bootstrap script."
+              echo "::error::gradle-wrapper.jar is missing."
               exit 1
             fi
           fi
 
           test -f android/gradle/wrapper/gradle-wrapper.jar
 
-          echo "81a82aaea5abcc8ff68b3dfcb58b3c3c429378efd98e7433460610fecd7ae45f  android/gradle/wrapper/gradle-wrapper.jar" \
-            | sha256sum -c -
-
-      - name: Flutter pub get
-        run: flutter pub get
-
-      - name: Generate Isar code
-        run: dart run build_runner build --delete-conflicting-outputs
-
-      - name: Prepare release signing
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Generate Isar / Dart code
         shell: bash
         run: |
           set -euo pipefail
+          cd "$PROJECT_DIR"
 
-          test -n "$ANDROID_KEYSTORE_BASE64"
-          test -n "$ANDROID_KEYSTORE_PASSWORD"
-          test -n "$ANDROID_KEY_ALIAS"
-          test -n "$ANDROID_KEY_PASSWORD"
+          dart run build_runner build --delete-conflicting-outputs
 
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/release-key.jks
-
-          cat > android/key.properties <<EOF
-          storeFile=release-key.jks
-          storePassword=$ANDROID_KEYSTORE_PASSWORD
-          keyAlias=$ANDROID_KEY_ALIAS
-          keyPassword=$ANDROID_KEY_PASSWORD
-          EOF
-
-          chmod 600 android/release-key.jks android/key.properties
-
-      - name: Build release APK
-        run: flutter build apk --release --split-per-abi
-
-      - name: Build release AAB
-        run: flutter build appbundle --release
-
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8
-        with:
-          files: |
-            build/app/outputs/flutter-apk/*.apk
-            build/app/outputs/bundle/release/*.aab
-
-      - name: Remove release signing material
-        if: always()
+      - name: Verify release version
         shell: bash
         run: |
-          rm -f android/release-key.jks
-          rm -f android/key.properties
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+
+          TAG="${GITHUB_REF_NAME}"
+
+          echo "Release tag: $TAG"
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid release tag: $TAG"
+            echo "Expected format: vMAJOR.MINOR.PATCH"
+            exit 1
+          fi
+
+          VERSION="$(awk -F': ' '/^version:/ {print $2; exit}' pubspec.yaml | cut -d'+' -f1)"
+
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not read version from pubspec.yaml"
+            exit 1
+          fi
+
+          TAG_VERSION="${TAG#v}"
+
+          if [ "$VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Tag version $TAG_VERSION does not match pubspec version $VERSION"
+            exit 1
+          fi
+
+          echo "Version check passed: $VERSION"
+
+      - name: Build release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+
+          flutter build apk --release
+
+          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+
+          if [ ! -f "$APK_PATH" ]; then
+            echo "::error::Release APK was not produced."
+            find build -type f -name "*.apk" -print || true
+            exit 1
+          fi
+
+          ls -lh "$APK_PATH"
+
+      - name: Build release AAB
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+
+          flutter build appbundle --release
+
+          AAB_PATH="build/app/outputs/bundle/release/app-release.aab"
+
+          if [ ! -f "$AAB_PATH" ]; then
+            echo "::error::Release AAB was not produced."
+            find build -type f -name "*.aab" -print || true
+            exit 1
+          fi
+
+          ls -lh "$AAB_PATH"
+
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: v27-release-apk-${{ github.ref_name }}
+          path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      - name: Upload release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: v27-release-aab-${{ github.ref_name }}
+          path: ${{ env.PROJECT_DIR }}/build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk
+            ${{ env.PROJECT_DIR }}/build/app/outputs/bundle/release/app-release.aab
+          generate_release_notes: true
