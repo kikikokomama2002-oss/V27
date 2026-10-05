@@ -1,0 +1,20 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+*.g.dart
+
+# Android / local machine files
+android/.gradle/
+android/local.properties
+android/key.properties
+*.iml
+.idea/
+
+# Generated / OS files
+.DS_Store
+Thumbs.db

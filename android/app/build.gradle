@@ -1,0 +1,122 @@
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
+
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode') ?: '1'
+def flutterVersionName = localProperties.getProperty('flutter.versionName') ?: '1.0.0'
+
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+android {
+    namespace "com.example.musicplayer"
+    compileSdk 36
+    ndkVersion "28.2.13676358"
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+    }
+
+    // Keep native .so packaging compatible with 16 KB-page Android devices.
+    // The actual ELF alignment of prebuilt dependencies must still be verified
+    // on the built APK; AGP 8.13+ handles the APK-side alignment correctly.
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging false
+        }
+    }
+
+    defaultConfig {
+        applicationId "com.example.musicplayer"
+        minSdkVersion 24
+        targetSdkVersion 36
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+        multiDexEnabled true
+    }
+
+    signingConfigs {
+        release {
+            // Release builds must use an explicit release keystore. A debug
+            // keystore must never silently produce a publishable-looking
+            // release artifact.
+            def keystorePropertiesFile = rootProject.file("key.properties")
+            if (keystorePropertiesFile.exists()) {
+                def keystoreProperties = new Properties()
+                keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+                ['storeFile', 'storePassword', 'keyAlias', 'keyPassword'].each { key ->
+                    if (!keystoreProperties[key]?.toString()?.trim()) {
+                        throw new GradleException("android/key.properties is missing required '${key}'")
+                    }
+                }
+                def configuredStoreFile = rootProject.file(keystoreProperties['storeFile'])
+                if (!configuredStoreFile.isFile()) {
+                    throw new GradleException("Release keystore does not exist: ${configuredStoreFile}")
+                }
+                storeFile configuredStoreFile
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            def keystorePropertiesFile = rootProject.file("key.properties")
+            if (!keystorePropertiesFile.exists()) {
+                throw new GradleException("Missing android/key.properties: refusing to create a debug-signed release APK")
+            }
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            signingConfig signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source '../..'
+}
+
+dependencies {
+    def media3_version = "1.4.1"
+
+    implementation "androidx.media3:media3-exoplayer:$media3_version"
+    implementation "androidx.media3:media3-session:$media3_version"
+    implementation "androidx.media3:media3-common:$media3_version"
+
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+    implementation "androidx.core:core-ktx:1.13.1"
+    implementation "androidx.exifinterface:exifinterface:1.3.7"
+    implementation "androidx.multidex:multidex:2.0.1"
+
+    // FIX #5: DocumentFile wraps the Storage Access Framework tree the
+    // user grants via ACTION_OPEN_DOCUMENT_TREE for the sidecar-.lrc
+    // fallback on Android 13+ (see SidecarLyricsResolver, MainActivity).
+    // This is the one new dependency added for these fixes — it's a
+    // small, standard AndroidX artifact and there's no SAF-without-it
+    // alternative that isn't a hand-rolled DocumentsContract wrapper.
+    implementation "androidx.documentfile:documentfile:1.0.1"
+}

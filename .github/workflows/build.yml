@@ -1,0 +1,354 @@
+name: Android Build
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+
+jobs:
+  build:
+    name: Flutter Android Build and Test
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@c3d7ccbf814deadecbf6b21833020d5dc5c8eaf9 # setup-java immutable upstream commit
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2.21.0
+        with:
+          flutter-version: '3.44.7'
+          channel: stable
+          cache: true
+
+      - name: Locate Flutter project
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f "pubspec.yaml" ]; then
+            PROJECT_DIR="$PWD"
+          else
+            FOUND="$(find . -type f -name pubspec.yaml -not -path './.git/*' -print -quit || true)"
+            if [ -z "$FOUND" ]; then
+              echo "::error::No Flutter project found."
+              exit 1
+            fi
+            PROJECT_DIR="$(cd "$(dirname "$FOUND")" && pwd)"
+          fi
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Flutter project: $PROJECT_DIR"
+
+      - name: Prepare Android platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          PROJECT_NAME="$(awk '/^name:/ {print $2; exit}' pubspec.yaml)"
+          test -n "$PROJECT_NAME"
+
+          if [ ! -d android ]; then
+            flutter create --platforms=android --project-name "$PROJECT_NAME" --org com.example.musicplayer .
+          fi
+
+          if [ ! -f android/gradlew ] || [ ! -f android/gradle/wrapper/gradle-wrapper.jar ] || [ ! -f android/gradle/wrapper/gradle-wrapper.properties ]; then
+            flutter create --platforms=android --project-name "$PROJECT_NAME" --org com.example.musicplayer .
+          fi
+
+          test -f android/gradlew
+          test -f android/gradle/wrapper/gradle-wrapper.properties
+          if [ ! -f android/gradle/wrapper/gradle-wrapper.jar ]; then
+            ./android/gradle/wrapper/bootstrap-wrapper.sh
+          fi
+          test -f android/gradle/wrapper/gradle-wrapper.jar
+          echo "81a82aaea5abcc8ff68b3dfcb58b3c3c429378efd98e7433460610fecd7ae45f  android/gradle/wrapper/gradle-wrapper.jar" | sha256sum -c -
+
+      - name: Require committed dependency lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          test -f pubspec.lock || { echo "::error::pubspec.lock is required for reproducible application builds."; exit 1; }
+
+      - name: Flutter pub get
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          flutter pub get
+
+      - name: Generate Isar code
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: Analyze
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          flutter analyze
+
+      - name: Test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          flutter test
+
+      - name: Build debug APK
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          flutter build apk --debug --split-per-abi
+
+      - name: Upload debug artifacts
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: offline-music-player-debug
+          path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+
+  release:
+    name: Signed Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    permissions:
+      contents: write
+      metadata: read
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@c3d7ccbf814deadecbf6b21833020d5dc5c8eaf9 # setup-java immutable upstream commit
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2.21.0
+        with:
+          flutter-version: '3.44.7'
+          channel: stable
+          cache: true
+
+      - name: Prepare Android platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJECT_DIR="$PWD"
+          PROJECT_NAME="$(awk '/^name:/ {print $2; exit}' pubspec.yaml)"
+          test -n "$PROJECT_NAME"
+          test -d android
+          test -f android/gradlew
+          if [ ! -f android/gradle/wrapper/gradle-wrapper.jar ]; then
+            ./android/gradle/wrapper/bootstrap-wrapper.sh
+          fi
+          test -f android/gradle/wrapper/gradle-wrapper.jar
+          echo "81a82aaea5abcc8ff68b3dfcb58b3c3c429378efd98e7433460610fecd7ae45f  android/gradle/wrapper/gradle-wrapper.jar" | sha256sum -c -
+
+      - name: Verify active immutable release-tag ruleset
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_RULESET_TOKEN: ${{ secrets.RELEASE_RULESET_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -f .github/RELEASE_TAG_PROTECTION.json || {
+            echo "::error::Missing canonical release-tag protection policy."
+            exit 1
+          }
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('.github/RELEASE_TAG_PROTECTION.json').read_text())
+          assert data.get('target') == 'tag', 'policy target must be tag'
+          assert data.get('enforcement') == 'active', 'policy must require active enforcement'
+          include = data.get('conditions', {}).get('ref_name', {}).get('include', [])
+          assert 'refs/tags/v*' in include, 'policy must target refs/tags/v*'
+          types = {r.get('type') for r in data.get('rules', [])}
+          assert {'update', 'deletion'} <= types, 'policy must restrict update and deletion'
+          PY
+
+          test -n "$RELEASE_RULESET_TOKEN" || {
+            echo "::error::RELEASE_RULESET_TOKEN is required to verify bypass_actors; verification cannot fail open with the default workflow token."
+            exit 1
+          }
+          export GITHUB_REPOSITORY
+          export GH_TOKEN="$RELEASE_RULESET_TOKEN"
+          ids="$(gh api --paginate "/repos/${GITHUB_REPOSITORY}/rulesets?targets=tag&includes_parents=true&per_page=100" --jq '.[].id')"
+          test -n "$ids" || {
+            echo "::error::No GitHub tag rulesets are visible to the release workflow."
+            exit 1
+          }
+          found=0
+          while IFS= read -r rid; do
+            [ -n "$rid" ] || continue
+            detail="$(gh api "/repos/${GITHUB_REPOSITORY}/rulesets/${rid}?includes_parents=true")"
+            export RULESET_DETAIL="$detail"
+            if python3 - <<'PY'
+          import json, os
+          detail = json.loads(os.environ['RULESET_DETAIL'])
+          if detail.get('target') != 'tag' or detail.get('enforcement') != 'active':
+              raise SystemExit(1)
+          ref_name = detail.get('conditions', {}).get('ref_name', {})
+          includes = ref_name.get('include', [])
+          excludes = ref_name.get('exclude', [])
+          if 'refs/tags/v*' not in includes:
+              raise SystemExit(1)
+          # The canonical release policy has no exclusions. Any live exclusion
+          # could weaken the protection for refs/tags/v*, so fail closed.
+          if excludes != []:
+              raise SystemExit(1)
+          types = {r.get('type') for r in detail.get('rules', [])}
+          if not {'update', 'deletion'} <= types:
+              raise SystemExit(1)
+          # Missing bypass_actors is not proof that bypasses are absent.
+          if 'bypass_actors' not in detail:
+              raise SystemExit('2')
+          bypass_actors = detail.get('bypass_actors')
+          if not isinstance(bypass_actors, list):
+              raise SystemExit('2')
+          if bypass_actors:
+              raise SystemExit('2')
+          raise SystemExit(0)
+          PY
+            then
+              found=1
+              break
+            else
+              rc=$?
+              if [ "$rc" -eq 2 ]; then
+                echo "::error::Release-tag ruleset has bypass actors; immutable release tags must not be bypassable."
+                exit 1
+              fi
+            fi
+          done <<< "$ids"
+          [ "$found" -eq 1 ] || {
+            echo "::error::No ACTIVE GitHub tag ruleset targeting refs/tags/v* with update+deletion restrictions was found."
+            exit 1
+          }
+          echo "Active immutable release-tag ruleset verified."
+
+          BEFORE_SHA="${{ github.event.before }}"
+          ZERO_SHA="0000000000000000000000000000000000000000"
+          if [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "$ZERO_SHA" ]; then
+            echo "::error::Release tag $GITHUB_REF_NAME is being updated/reused (before=$BEFORE_SHA). Release tags are immutable."
+            exit 1
+          fi
+
+      - name: Validate release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          APP_VERSION="$(awk '/^version:/ {print $2; exit}' pubspec.yaml)"
+          APP_VERSION_NAME="${APP_VERSION%%+*}"
+          APP_VERSION_CODE="${APP_VERSION##*+}"
+
+          if [[ "$APP_VERSION" != *+* ]]; then
+            echo "::error::pubspec.yaml version must include versionName+versionCode; got $APP_VERSION"
+            exit 1
+          fi
+          if [[ "$TAG_VERSION" != "$APP_VERSION_NAME" ]]; then
+            echo "::error::Release tag $GITHUB_REF_NAME does not match pubspec version $APP_VERSION_NAME"
+            exit 1
+          fi
+          if ! [[ "$APP_VERSION_CODE" =~ ^[0-9]+$ ]]; then
+            echo "::error::pubspec versionCode must be numeric; got $APP_VERSION_CODE"
+            exit 1
+          fi
+
+          PREVIOUS_TAG="$(git tag --sort=-v:refname --list 'v[0-9]*' | grep -Fxv "$GITHUB_REF_NAME" | head -n 1 || true)"
+          if [ -n "$PREVIOUS_TAG" ]; then
+            PREVIOUS_VERSION="$(git show "$PREVIOUS_TAG:pubspec.yaml" 2>/dev/null | awk '/^version:/ {print $2; exit}' || true)"
+            if [[ "$PREVIOUS_VERSION" == *+* ]]; then
+              PREVIOUS_CODE="${PREVIOUS_VERSION##*+}"
+              if ! [[ "$PREVIOUS_CODE" =~ ^[0-9]+$ ]]; then
+                echo "::error::Previous release $PREVIOUS_TAG has an invalid versionCode: $PREVIOUS_CODE"
+                exit 1
+              fi
+              if [ "$APP_VERSION_CODE" -le "$PREVIOUS_CODE" ]; then
+                echo "::error::versionCode $APP_VERSION_CODE must be greater than previous release $PREVIOUS_TAG versionCode $PREVIOUS_CODE"
+                exit 1
+              fi
+            fi
+          fi
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "::error::A GitHub Release already exists for $GITHUB_REF_NAME; release tags are single-use and must not be rebuilt or moved."
+            exit 1
+          fi
+
+          echo "Release tag/version validated: $GITHUB_REF_NAME -> $APP_VERSION"
+          echo "Repository invariant: v* release tags must be protected against update/deletion; see .github/RELEASE_TAG_PROTECTION.md"
+
+      - name: Prepare release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/release-key.jks
+          cat > android/key.properties <<EOF
+          storeFile=release-key.jks
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+          chmod 600 android/release-key.jks android/key.properties
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Generate Isar code
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build release APK
+        run: flutter build apk --release --split-per-abi
+
+      - name: Build release AAB
+        run: flutter build appbundle --release
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
+        with:
+          files: |
+            build/app/outputs/flutter-apk/*.apk
+            build/app/outputs/bundle/release/*.aab
+
+      - name: Remove release signing material
+        if: always()
+        shell: bash
+        run: |
+          rm -f android/release-key.jks android/key.properties

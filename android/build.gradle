@@ -1,0 +1,31 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.buildDir = '../build'
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+// Compatibility fallback for legacy Android library plugins (notably
+// isar_flutter_libs 3.1.0+1) that predate AGP 8 namespace requirements.
+subprojects {
+    plugins.withId('com.android.library') {
+        project.android {
+            compileSdkVersion 36
+            if (namespace == null || namespace.toString().trim().isEmpty()) {
+                namespace project.group.toString()
+            }
+        }
+    }
+}
+
+subprojects {
+    project.evaluationDependsOn(':app')
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
