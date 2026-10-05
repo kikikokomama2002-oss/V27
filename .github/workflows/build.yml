@@ -22,16 +22,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ce94fb0c812a5d7a0b5f7c # v5
+        uses: actions/checkout@v6
 
       - name: Setup Java
-        uses: actions/setup-java@dded4c94c8c5c9c0b7c1d1c7e8f7e0e7b9d8f3d7 # v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@fd55a5c8f7b5b4c8e0f5e5f0b3f8e5f8f4c0c2b1 # v2
+        uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
@@ -69,6 +69,7 @@ jobs:
           fi
 
           test -s pubspec.lock
+
           echo "pubspec.lock found:"
           ls -lh pubspec.lock
 
@@ -119,6 +120,7 @@ jobs:
 
           echo "Android platform:"
           ls -la android
+
           echo "Gradle wrapper:"
           ls -la android/gradle/wrapper
 
@@ -128,7 +130,7 @@ jobs:
           set -euo pipefail
           cd "$PROJECT_DIR"
 
-          test -x android/gradlew
+          test -f android/gradlew
           chmod +x android/gradlew
 
           echo "Gradle wrapper properties:"
@@ -198,24 +200,25 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ce94fb0c812a5d7a0b5f7c # v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Setup Java
-        uses: actions/setup-java@dded4c94c8c5c9c0b7c1d1c7e8f7e0e7b9d8f3d7 # v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@fd55a5c8f7b5b4c8e0f5e5f0b3f8e5f8f4c0c2b1 # v2
+        uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
 
       - name: Locate Flutter project
+        id: project
         shell: bash
         run: |
           set -euo pipefail
@@ -232,12 +235,18 @@ jobs:
           test -f "$PROJECT_DIR/pubspec.yaml"
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Flutter project: $PROJECT_DIR"
 
       - name: Require pubspec.lock
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
+
+          if [ ! -f pubspec.lock ]; then
+            echo "::error::pubspec.lock is missing."
+            exit 1
+          fi
 
           test -s pubspec.lock
 
@@ -247,6 +256,7 @@ jobs:
           set -euo pipefail
           cd "$PROJECT_DIR"
 
+          flutter --version
           flutter pub get
 
       - name: Prepare Android platform
@@ -272,6 +282,17 @@ jobs:
           fi
 
           test -f android/gradle/wrapper/gradle-wrapper.jar
+
+      - name: Verify Gradle wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+
+          test -x android/gradlew || chmod +x android/gradlew
+
+          cd android
+          ./gradlew --version
 
       - name: Generate Isar / Dart code
         shell: bash
@@ -312,6 +333,22 @@ jobs:
           fi
 
           echo "Version check passed: $VERSION"
+
+      - name: Flutter analyze
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+
+          flutter analyze --no-fatal-infos
+
+      - name: Flutter tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+
+          flutter test
 
       - name: Build release APK
         shell: bash
