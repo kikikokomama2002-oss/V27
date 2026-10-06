@@ -47,7 +47,6 @@ void main() {
 
   test('BUG-011 SAF access absence is typed, not an authoritative no-lyrics result', () {
     final source = File(sidecar).readAsStringSync();
-    final resolver = extractBlock(source, 'private fun viaMediaStore(');
     final volumeResolver = extractBlock(source, 'private fun resolveTrackVolume(context: Context, volume: String?): String');
     final pathValidator = extractBlock(source, 'private fun validateRelativePath(relativePath: String?): String');
     final findBody = extractBlock(source, 'suspend fun find(');
