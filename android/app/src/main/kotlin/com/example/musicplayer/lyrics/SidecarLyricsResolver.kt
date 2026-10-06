@@ -246,6 +246,13 @@ object SidecarLyricsResolver {
         // directory identity. Never fall back to a filename-only search when
         // RELATIVE_PATH is unavailable (notably on older Android versions).
         val safeRelativePath = validateRelativePath(relativePath)
+        // resolveTrackVolume throws AccessUnavailableException when the persisted
+        // volume identity cannot be established safely:
+        // "Track media volume is unavailable or invalid; sidecar lookup is indeterminate"
+        // "Track media volume cannot be resolved on this Android version; sidecar lookup is indeterminate"
+        // "Track media volume is not currently exposed by MediaStore; sidecar lookup is indeterminate"
+        // Before Android Q the app's scanner exposes only the legacy MediaStore collection
+        // under the canonical external_primary identity.
         val safeVolume = resolveTrackVolume(context, mediaStoreVolume)
         val stem = stemOf(displayName) ?: return null
         var mediaStoreFailure: Throwable? = null

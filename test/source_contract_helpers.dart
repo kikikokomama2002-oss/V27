@@ -17,6 +17,7 @@ int _findCodeMarker(String source, String marker, [int from = 0]) {
       if (c == '\n') lineComment = false;
       continue;
     }
+
     if (blockComment) {
       if (c == '*' && n == '/') {
         blockComment = false;
@@ -24,6 +25,7 @@ int _findCodeMarker(String source, String marker, [int from = 0]) {
       }
       continue;
     }
+
     if (tripleQuote) {
       if (n2 == '$quote$quote$quote') {
         tripleQuote = false;
@@ -31,6 +33,7 @@ int _findCodeMarker(String source, String marker, [int from = 0]) {
       }
       continue;
     }
+
     if (quote.isNotEmpty) {
       if (escaped) {
         escaped = false;
@@ -47,23 +50,30 @@ int _findCodeMarker(String source, String marker, [int from = 0]) {
       i++;
       continue;
     }
+
     if (c == '/' && n == '*') {
       blockComment = true;
       i++;
       continue;
     }
+
+    // Contract markers may intentionally start with a quote,
+    // e.g. `"getAlbumArt" -> {`.
+    if (source.startsWith(marker, i)) return i;
+
     if ((c == '"' || c == "'") && n2 == '$c$c$c') {
       quote = c;
       tripleQuote = true;
       i += 2;
       continue;
     }
+
     if (c == '"' || c == "'") {
       quote = c;
       continue;
     }
-    if (source.startsWith(marker, i)) return i;
   }
+
   return -1;
 }
 
