@@ -2140,15 +2140,15 @@ class LibraryRepository {
         final count = switch (field) {
           GroupField.album => await _isar.tracks
               .where()
-              .albumEqualTo(name, caseSensitive: false)
+              .albumEqualTo(name)
               .count(),
           GroupField.artist => await _isar.tracks
               .where()
-              .artistEqualTo(name, caseSensitive: false)
+              .artistEqualTo(name)
               .count(),
           GroupField.folder => await _isar.tracks
               .where()
-              .folderEqualTo(name, caseSensitive: true)
+              .folderEqualTo(name)
               .count(),
         };
         return (name, count);

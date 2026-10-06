@@ -21,9 +21,9 @@ void main() {
     // query, total queries bounded by maxPageSize.
     expect(body, contains('const maxConcurrent = 4;'));
     expect(body, contains('Future.wait(chunk.map('));
-    expect(body, contains('.albumEqualTo(name, caseSensitive: false)\n              .count(),'));
-    expect(body, contains('.artistEqualTo(name, caseSensitive: false)\n              .count(),'));
-    expect(body, contains('.folderEqualTo(name, caseSensitive: true)\n              .count(),'));
+    expect(body, contains('.albumEqualTo(name)\n              .count(),'));
+    expect(body, contains('.artistEqualTo(name)\n              .count(),'));
+    expect(body, contains('.folderEqualTo(name)\n              .count(),'));
   });
 
   test('legacy scan reconciliation treats an unavailable generation as neutral, not a mismatch', () {
