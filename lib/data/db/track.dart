@@ -19,10 +19,7 @@ class Track {
   @Index()
   late int mediaStoreId; // MediaStore.Audio.Media._ID, used for delta scans
 
-  @Index(type: IndexType.value, caseSensitive: true, composite: [
-    CompositeIndex('mediaStoreVolume'),
-    CompositeIndex('mediaStoreId'),
-  ])
+  @Index(type: IndexType.value, caseSensitive: true)
   late String title;
 
   @Index(type: IndexType.value, caseSensitive: false)

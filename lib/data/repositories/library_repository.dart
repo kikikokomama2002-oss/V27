@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'package:isar_community/isar_community.dart';
+import 'package:isar_community/isar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../playback/player_channel.dart';
 import '../db/track.dart';
@@ -1948,7 +1948,7 @@ class LibraryRepository {
         .filter()
         .anyOf(
           terms,
-          (q, term) => q.searchWordsAnyStartsWith(term),
+          (q, term) => q.searchWordsElementStartsWith(term),
         )
         .offset(offset)
         .limit(limit)
@@ -1966,7 +1966,7 @@ class LibraryRepository {
         .where()
         .anyOf(
           terms,
-          (q, term) => q.searchWordsAnyStartsWith(term),
+          (q, term) => q.searchWordsElementStartsWith(term),
         )
         .count();
   }
@@ -2028,23 +2028,23 @@ class LibraryRepository {
       GroupField.album => _isar.tracks
           .where(distinct: true)
           .anyAlbum()
-          .albumProperty()
           .offset(offset)
           .limit(limit)
+          .albumProperty()
           .findAll(),
       GroupField.artist => _isar.tracks
           .where(distinct: true)
           .anyArtist()
-          .artistProperty()
           .offset(offset)
           .limit(limit)
+          .artistProperty()
           .findAll(),
       GroupField.folder => _isar.tracks
           .where(distinct: true)
           .anyFolder()
-          .folderProperty()
           .offset(offset)
           .limit(limit)
+          .folderProperty()
           .findAll(),
     };
   }
@@ -2073,14 +2073,14 @@ class LibraryRepository {
     }
     return switch (field) {
       GroupField.album =>
-        _isar.tracks.where().albumEqualTo(name, caseSensitive: false).count(),
+        _isar.tracks.where().albumEqualTo(name).count(),
       GroupField.artist => _isar.tracks
           .where()
-          .artistEqualTo(name, caseSensitive: false)
+          .artistEqualTo(name)
           .count(),
       GroupField.folder => _isar.tracks
           .where()
-          .folderEqualTo(name, caseSensitive: true)
+          .folderEqualTo(name)
           .count(),
     };
   }
@@ -2139,15 +2139,15 @@ class LibraryRepository {
         final count = switch (field) {
           GroupField.album => await _isar.tracks
               .where()
-              .albumEqualTo(name, caseSensitive: false)
+              .albumEqualTo(name)
               .count(),
           GroupField.artist => await _isar.tracks
               .where()
-              .artistEqualTo(name, caseSensitive: false)
+              .artistEqualTo(name)
               .count(),
           GroupField.folder => await _isar.tracks
               .where()
-              .folderEqualTo(name, caseSensitive: true)
+              .folderEqualTo(name)
               .count(),
         };
         return (name, count);
@@ -2174,7 +2174,7 @@ class LibraryRepository {
           .where()
           .anyTitle()
           .filter()
-          .albumEqualTo(name, caseSensitive: false)
+          .albumEqualTo(name)
           .offset(offset)
           .limit(limit)
           .findAll(),
@@ -2182,7 +2182,7 @@ class LibraryRepository {
           .where()
           .anyTitle()
           .filter()
-          .artistEqualTo(name, caseSensitive: false)
+          .artistEqualTo(name)
           .offset(offset)
           .limit(limit)
           .findAll(),
@@ -2190,7 +2190,7 @@ class LibraryRepository {
           .where()
           .anyTitle()
           .filter()
-          .folderEqualTo(name, caseSensitive: true)
+          .folderEqualTo(name)
           .offset(offset)
           .limit(limit)
           .findAll(),
@@ -2209,19 +2209,19 @@ class LibraryRepository {
 
     final titleBefore = await _isar.tracks
         .where()
-        .titleLessThan(current.title, caseSensitive: true)
+        .titleLessThan(current.title)
         .count();
 
     final sameTitleVolumeBefore = await _isar.tracks
         .where()
-        .titleEqualTo(current.title, caseSensitive: true)
+        .titleEqualTo(current.title)
         .filter()
         .mediaStoreVolumeLessThan(current.mediaStoreVolume)
         .count();
 
     final sameTitleSameVolumeIdBefore = await _isar.tracks
         .where()
-        .titleEqualTo(current.title, caseSensitive: true)
+        .titleEqualTo(current.title)
         .filter()
         .mediaStoreVolumeEqualTo(current.mediaStoreVolume)
         .and()
@@ -2258,7 +2258,7 @@ class LibraryRepository {
         .where()
         .anyOf(
           terms,
-          (q, term) => q.searchWordsAnyStartsWith(term),
+          (q, term) => q.searchWordsElementStartsWith(term),
         )
         .filter()
         .mediaStoreVolumeEqualTo(current.mediaStoreVolume)
@@ -2270,20 +2270,20 @@ class LibraryRepository {
         .where()
         .anyOf(
           terms,
-          (q, term) => q.searchWordsAnyStartsWith(term),
+          (q, term) => q.searchWordsElementStartsWith(term),
         )
         .filter()
-        .titleLessThan(current.title, caseSensitive: true)
+        .titleLessThan(current.title)
         .count();
 
     final sameTitleVolumeBefore = await _isar.tracks
         .where()
         .anyOf(
           terms,
-          (q, term) => q.searchWordsAnyStartsWith(term),
+          (q, term) => q.searchWordsElementStartsWith(term),
         )
         .filter()
-        .titleEqualTo(current.title, caseSensitive: true)
+        .titleEqualTo(current.title)
         .mediaStoreVolumeLessThan(current.mediaStoreVolume)
         .count();
 
@@ -2291,10 +2291,10 @@ class LibraryRepository {
         .where()
         .anyOf(
           terms,
-          (q, term) => q.searchWordsAnyStartsWith(term),
+          (q, term) => q.searchWordsElementStartsWith(term),
         )
         .filter()
-        .titleEqualTo(current.title, caseSensitive: true)
+        .titleEqualTo(current.title)
         .mediaStoreVolumeEqualTo(current.mediaStoreVolume)
         .mediaStoreIdLessThan(current.mediaStoreId)
         .count();
@@ -2319,19 +2319,19 @@ class LibraryRepository {
           .where()
           .mediaStoreVolumeMediaStoreIdEqualTo(current.mediaStoreVolume, mediaStoreId)
           .filter()
-          .albumEqualTo(name, caseSensitive: false)
+          .albumEqualTo(name)
           .count(),
       GroupField.artist => await _isar.tracks
           .where()
           .mediaStoreVolumeMediaStoreIdEqualTo(current.mediaStoreVolume, mediaStoreId)
           .filter()
-          .artistEqualTo(name, caseSensitive: false)
+          .artistEqualTo(name)
           .count(),
       GroupField.folder => await _isar.tracks
           .where()
           .mediaStoreVolumeMediaStoreIdEqualTo(current.mediaStoreVolume, mediaStoreId)
           .filter()
-          .folderEqualTo(name, caseSensitive: true)
+          .folderEqualTo(name)
           .count(),
     };
     if (matchesCurrent == 0) return null;
@@ -2340,81 +2340,81 @@ class LibraryRepository {
       final titleBefore = switch (field) {
         GroupField.album => await _isar.tracks
             .where()
-            .titleLessThan(current.title, caseSensitive: true)
+            .titleLessThan(current.title)
             .filter()
-            .albumEqualTo(name, caseSensitive: false)
+            .albumEqualTo(name)
             .count(),
         GroupField.artist => await _isar.tracks
             .where()
-            .titleLessThan(current.title, caseSensitive: true)
+            .titleLessThan(current.title)
             .filter()
-            .artistEqualTo(name, caseSensitive: false)
+            .artistEqualTo(name)
             .count(),
         GroupField.folder => await _isar.tracks
             .where()
-            .titleLessThan(current.title, caseSensitive: true)
+            .titleLessThan(current.title)
             .filter()
-            .folderEqualTo(name, caseSensitive: true)
+            .folderEqualTo(name)
             .count(),
       };
 
       final sameTitleVolumeBefore = switch (field) {
         GroupField.album => await _isar.tracks
             .where()
-            .titleEqualTo(current.title, caseSensitive: true)
+            .titleEqualTo(current.title)
             .filter()
             .mediaStoreVolumeLessThan(current.mediaStoreVolume)
             .and()
-            .albumEqualTo(name, caseSensitive: false)
+            .albumEqualTo(name)
             .count(),
         GroupField.artist => await _isar.tracks
             .where()
-            .titleEqualTo(current.title, caseSensitive: true)
+            .titleEqualTo(current.title)
             .filter()
             .mediaStoreVolumeLessThan(current.mediaStoreVolume)
             .and()
-            .artistEqualTo(name, caseSensitive: false)
+            .artistEqualTo(name)
             .count(),
         GroupField.folder => await _isar.tracks
             .where()
-            .titleEqualTo(current.title, caseSensitive: true)
+            .titleEqualTo(current.title)
             .filter()
             .mediaStoreVolumeLessThan(current.mediaStoreVolume)
             .and()
-            .folderEqualTo(name, caseSensitive: true)
+            .folderEqualTo(name)
             .count(),
       };
 
       final sameTitleSameVolumeIdBefore = switch (field) {
         GroupField.album => await _isar.tracks
             .where()
-            .titleEqualTo(current.title, caseSensitive: true)
+            .titleEqualTo(current.title)
             .filter()
             .mediaStoreVolumeEqualTo(current.mediaStoreVolume)
             .and()
             .mediaStoreIdLessThan(current.mediaStoreId)
             .and()
-            .albumEqualTo(name, caseSensitive: false)
+            .albumEqualTo(name)
             .count(),
         GroupField.artist => await _isar.tracks
             .where()
-            .titleEqualTo(current.title, caseSensitive: true)
+            .titleEqualTo(current.title)
             .filter()
             .mediaStoreVolumeEqualTo(current.mediaStoreVolume)
             .and()
             .mediaStoreIdLessThan(current.mediaStoreId)
             .and()
-            .artistEqualTo(name, caseSensitive: false)
+            .artistEqualTo(name)
             .count(),
         GroupField.folder => await _isar.tracks
             .where()
-            .titleEqualTo(current.title, caseSensitive: true)
+            .titleEqualTo(current.title)
             .filter()
             .mediaStoreVolumeEqualTo(current.mediaStoreVolume)
             .and()
             .mediaStoreIdLessThan(current.mediaStoreId)
             .and()
-            .folderEqualTo(name, caseSensitive: true)
+            .folderEqualTo(name)
             .count(),
       };
 

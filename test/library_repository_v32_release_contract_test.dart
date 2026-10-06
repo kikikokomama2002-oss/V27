@@ -1,8 +1,10 @@
+import 'package:flutter_test/flutter_test.dart';
 import 'dart:io';
 
 import 'source_contract_helpers.dart';
 
 void main() {
+  test('V32 release contract', () {
   final source = readProjectFile('lib/data/repositories/library_repository.dart');
   final native = readProjectFile(
     'android/app/src/main/kotlin/com/example/musicplayer/scanner/MediaStoreScanner.kt',
@@ -46,4 +48,5 @@ void main() {
   // conservative.
   expectContains(source, 'if (!interruptedSync &&\n          !forceFullIdentityReconcile &&\n          !effectiveReconcileDeletions)');
   expectContains(source, 'await prefs.setBool(_syncInProgressKey, false);');
+  });
 }

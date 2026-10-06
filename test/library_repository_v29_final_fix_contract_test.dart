@@ -41,10 +41,15 @@ void main() {
       'Future<void> handleMediaStoreChanged({',
       '  Track _trackFromMediaStoreMap(',
     );
-    expect(observerPath.indexOf('_tracksChangedController.add(null)'),
-        lessThan(observerPath.indexOf('scanAndPersist(
-              forceFullIdentityReconcile: unknown,')));
-  });
+      expect(
+        observerPath.indexOf('_tracksChangedController.add(null)'),
+        lessThan(
+          observerPath.indexOf(
+            'scanAndPersist(\n                forceFullIdentityReconcile: unknown,',
+          ),
+        ),
+      );
+    });
 
   test('committed targeted deletions are emitted from finally', () {
     final source = _source();

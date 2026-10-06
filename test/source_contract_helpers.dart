@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'package:flutter_test/flutter_test.dart';
+
 int _findCodeMarker(String source, String marker, [int from = 0]) {
   var lineComment = false;
   var blockComment = false;
@@ -237,4 +240,22 @@ bool occursInOrder(String source, List<String> markers) {
     cursor = next;
   }
   return true;
+}
+
+void expectContains(String source, String expected, [String? reason]) {
+  expect(source, contains(expected), reason: reason);
+}
+
+void expectNotContains(String source, String unexpected, [String? reason]) {
+  expect(source, isNot(contains(unexpected)), reason: reason);
+}
+
+String readProjectFile(String path) => File(path).readAsStringSync();
+
+void contractExpect(String source, String expected, [String? reason]) {
+  expect(source, contains(expected), reason: reason);
+}
+
+void contractExpectAbsent(String source, String unexpected, [String? reason]) {
+  expect(source, isNot(contains(unexpected)), reason: reason);
 }

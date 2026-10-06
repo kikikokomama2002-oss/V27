@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
@@ -246,7 +247,12 @@ class _GroupedTabState extends ConsumerState<_GroupedTab> {
 /// (via [groupTracksPagingProvider]) once expanded, and released again
 /// once collapsed — see the `autoDispose` note on that provider.
 class _GroupTile extends StatefulWidget {
-  const _GroupTile({required this.field, required this.group, required this.icon});
+  const _GroupTile({
+    super.key,
+    required this.field,
+    required this.group,
+    required this.icon,
+  });
   final GroupField field;
   final GroupSummary group;
   final IconData icon;

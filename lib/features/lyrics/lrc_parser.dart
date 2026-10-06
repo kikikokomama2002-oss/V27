@@ -23,7 +23,7 @@ class LrcParser {
     final lines = <LyricLine>[];
     var offsetMs = 0;
 
-    for (final rawLine in raw.removePrefix('\uFEFF').split(RegExp(r'\r?\n'))) {
+    for (final rawLine in (raw.startsWith('\uFEFF') ? raw.substring(1) : raw).split(RegExp(r'\r?\n'))) {
       var remaining = rawLine.trim();
       final timestamps = <Duration>[];
       var lyricPrefix = '';
@@ -89,7 +89,7 @@ class LrcParser {
       if (timestamps.isEmpty) continue;
       final lyricText = remaining.trim();
       final separator = lyricPrefix.isNotEmpty && lyricText.isNotEmpty &&
-              !lyricPrefix.endsWith(RegExp(r'\s'))
+              !RegExp(r'\s$').hasMatch(lyricPrefix)
           ? ' '
           : '';
       final text = '$lyricPrefix$separator$lyricText'.trim();

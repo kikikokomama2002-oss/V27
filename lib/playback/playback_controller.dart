@@ -457,6 +457,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       }
       if (!_queueGenerationGate.isCurrent(restoreGeneration)) return;
 
+        try {
         // Publish before scan/refresh so the native delayed rebase can safely
         // obtain a page from the restored logical queue.
         _activeSpec = spec;

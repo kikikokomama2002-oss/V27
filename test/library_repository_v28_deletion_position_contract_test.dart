@@ -65,7 +65,6 @@ void main() {
       ),
     );
   });
-}
 
 
 test('generation payload fields tolerate omitted native values', () {
@@ -108,3 +107,5 @@ test('dispose closes repository streams and scan page has no empty-page retry lo
   expect(page, isNot(contains('for (var attempt = 0; attempt < 3; attempt++)')));
   expect(page, isNot(contains('lastError')));
 });
+
+}
