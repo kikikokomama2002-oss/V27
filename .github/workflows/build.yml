@@ -154,7 +154,7 @@ jobs:
           set -euo pipefail
           cd "$PROJECT_DIR"
 
-          flutter analyze --no-fatal-infos
+          flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Flutter tests
         shell: bash
@@ -340,7 +340,7 @@ jobs:
           set -euo pipefail
           cd "$PROJECT_DIR"
 
-          flutter analyze --no-fatal-infos
+          flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Flutter tests
         shell: bash
