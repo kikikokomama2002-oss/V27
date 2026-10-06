@@ -279,7 +279,8 @@ class LibraryRepository {
     // and can outlive the 15-minute maintenance tick on very large libraries.
     // Never allow a later tick to enqueue another full reconciliation while
     // the previous maintenance pass is still waiting/running.
-    if (_disposed || _periodicDeletionReconciliationInFlight) return;
+    if (_disposed) return;
+    if (_periodicDeletionReconciliationInFlight) return;
     _periodicDeletionReconciliationInFlight = true;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -2139,15 +2140,15 @@ class LibraryRepository {
         final count = switch (field) {
           GroupField.album => await _isar.tracks
               .where()
-              .albumEqualTo(name)
+              .albumEqualTo(name, caseSensitive: false)
               .count(),
           GroupField.artist => await _isar.tracks
               .where()
-              .artistEqualTo(name)
+              .artistEqualTo(name, caseSensitive: false)
               .count(),
           GroupField.folder => await _isar.tracks
               .where()
-              .folderEqualTo(name)
+              .folderEqualTo(name, caseSensitive: true)
               .count(),
         };
         return (name, count);
