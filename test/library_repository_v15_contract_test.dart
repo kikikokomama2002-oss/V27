@@ -25,7 +25,7 @@ void main() {
   });
 
   test('generation cursor is persisted only after end-of-scan stability check', () {
-    final stableCheck = source.indexOf('MediaStore generation/version/lifecycle changed during scan');
+    final stableCheck = source.indexOf('MediaStore version/lifecycle changed during scan');
     final cursorPersist = source.indexOf('prefs.setString(\n      _mediaStoreGenerationCursorsKey', stableCheck);
     expect(stableCheck, greaterThanOrEqualTo(0));
     expect(cursorPersist, greaterThan(stableCheck));

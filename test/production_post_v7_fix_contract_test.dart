@@ -12,7 +12,7 @@ void main() {
   test('legacy artwork threads cancellation into platform thumbnail APIs', () {
     final source = _read('$root/android/app/src/main/kotlin/com/example/musicplayer/scanner/AlbumArtLoader.kt');
     final body = extractBlock(source, 'private suspend fun loadViaThumbnail(');
-    expect(body, contains('MediaStore.Audio.Thumbnails.cancelThumbnailRequest('));
+    expect(body, contains('context.contentResolver.loadThumbnail('));
     expect(body, contains('onCancel = { cancellationSignal.cancel() }'));
     expect(body, contains('cancellationSignal,'));
     expect(body, contains('} ?: return null'));
@@ -39,9 +39,17 @@ void main() {
     final dartSource = _read('$root/lib/playback/player_channel.dart');
     final repoSource = _read('$root/lib/data/repositories/library_repository.dart');
     final kotlinSource = _read('$root/android/app/src/main/kotlin/com/example/musicplayer/channels/PlayerChannel.kt');
-    final dartIdentityCall = extractBlock(dartSource, 'Future<List<Map<String, dynamic>>> scanLibraryIdentities(');
+    final dartIdentityCall = extractBlock(
+      dartSource,
+      'required List<int> ids,\n  }) async {',
+      markerContainsOpeningBrace: true,
+    );
     final repoIdentityUpsert = extractBlock(repoSource, 'Future<bool> _upsertMediaStoreChangeIdentitiesLocked(');
     final kotlinIdentityBranch = extractBlock(kotlinSource, '"scanLibraryIdentities" -> {', markerContainsOpeningBrace: true);
+    expect(
+      dartIdentityCall,
+      contains("_method.invokeMethod<List<dynamic>>("),
+    );
     expect(dartIdentityCall, contains("'scanLibraryIdentities'"));
     expect(repoIdentityUpsert, contains('_upsertMediaStoreChangeIdentitiesLocked'));
     expect(kotlinIdentityBranch, contains('"scanLibraryIdentities" ->'));
@@ -50,8 +58,16 @@ void main() {
   test('legacy volumes are not unconditionally full-scanned on every refresh', () {
     final repoSource = _read('$root/lib/data/repositories/library_repository.dart');
     final channelSource = _read('$root/lib/playback/player_channel.dart');
-    final scanImpl = extractBlock(repoSource, 'Future<void> _scanAndPersistInternalImpl(');
-    final scanPage = extractBlock(channelSource, 'Future<List<Map<String, dynamic>>> scanLibraryPage(');
+    final scanImpl = extractBlock(
+      repoSource,
+      'Future<void> _scanAndPersistInternalImpl({\n    bool forceFullIdentityReconcile = false,\n    bool reconcileDeletions = false,\n  }) async {',
+      markerContainsOpeningBrace: true,
+    );
+    final scanPage = extractBlock(
+      channelSource,
+      'int limit = 500,\n  }) async {',
+      markerContainsOpeningBrace: true,
+    );
     expect(scanPage, contains('final sinceSeconds = sinceTimestamp ~/ 1000;'));
     expect(scanPage, contains('untilTimestamp <= 0'));
     expect(scanPage, contains("'sinceTimestampSeconds': sinceSeconds"));

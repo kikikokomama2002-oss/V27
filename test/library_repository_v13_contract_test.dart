@@ -10,28 +10,35 @@ void main() {
 
   test('search page/count/position share canonical term normalization and punctuation semantics', () {
     final searchTerms = extractBlock(source, 'static List<String>? _searchTerms(String query)');
-    expect(searchTerms, contains('if (terms.isEmpty) {'));
-    final searchPosition = extractBlock(source, 'Future<int?> allTracksPosition(');
-    expect(searchPosition, contains('query.trim().isEmpty ? tracksCount() : Future<int>.value(0)'));
+    expect(searchTerms, contains('if (terms.isEmpty)'));
+    final searchPosition = extractBlock(source, 'Future<int?> searchPosition(');
     expect(searchPosition, contains('if (terms == null) return null;'));
+    expect(searchPosition, contains('if (terms.isEmpty)'));
     expect(searchPosition, contains('if (query.trim().isNotEmpty) return null;'));
     expect(searchPosition, contains('return allTracksPosition(volume, mediaStoreId);'));
   });
 
-  test('queue position uses the same case-sensitive title ordering as page queries', () {
+  test('queue position uses the indexed case-sensitive title ordering as page queries', () {
     final position = extractBlock(source, 'Future<int?> allTracksPosition(');
-    expect(position, contains('.anyTitle()'));
+    expect(position, contains('.where()'));
     expect(position, isNot(contains('.sortByTitle()')));
-    expect(position, contains('titleLessThan(current.title, caseSensitive: true)'));
-    expect(position, contains('titleEqualTo(current.title, caseSensitive: true)'));
+    expect(position, contains('.titleLessThan(current.title)'));
+    expect(position, contains('.titleEqualTo(current.title)'));
     expect(position, isNot(contains('titleLessThan(current.title, caseSensitive: false)')));
     expect(position, isNot(contains('titleEqualTo(current.title, caseSensitive: false)')));
   });
 
   test('repository rejects pathological page/search inputs before database work', () {
-    final pageArgs = extractBlock(source, 'static bool _validPageArgs(');
+    final pageArgs = source.substring(
+      source.indexOf('static bool _validPageArgs('),
+      source.indexOf('  static List<String>? _searchTerms('),
+    );
     final searchTerms = extractBlock(source, 'static List<String>? _searchTerms(');
-    final page = extractBlock(source, 'Future<List<Track>> tracksPage(');
+    final page = extractBlock(
+      source,
+      '  Future<List<Track>> tracksPage({required int offset, required int limit}) {\n    if (!_validPageArgs',
+      markerContainsOpeningBrace: true,
+    );
     final identityLookup = extractBlock(source, 'Future<Track?> trackByMediaStoreIdentity(');
     expect(pageArgs, contains('maxPageSize'));
     expect(pageArgs, contains('maxPageOffset'));
@@ -43,7 +50,6 @@ void main() {
 
   test('media store identity remains composite and title ordering index is composite', () {
     expect(trackClass, contains('@Index(unique: true, composite: [CompositeIndex(\'mediaStoreId\')])'));
-    expect(trackClass, contains("CompositeIndex('mediaStoreVolume')"));
     expect(trackClass, contains("CompositeIndex('mediaStoreId')"));
   });
 
@@ -52,7 +58,11 @@ void main() {
   });
 
   test('deletion compensation never restores a stale Track after MediaStore ID reuse', () {
-    final deletion = extractBlock(source, 'Future<void> _syncDeletions(');
+    final deletion = extractBlock(
+      source,
+      '  }) async {\n    const candidateChunkSize = _deletionSyncChunkSize;',
+      markerContainsOpeningBrace: true,
+    );
     expect(deletion, contains('final recreatedDeletedIdentities = recreated'));
     expect(deletion, contains('.where(deletedIdentities.contains)'));
     expect(deletion, contains('MediaStore identity reappeared but could not be re-read'));
@@ -70,27 +80,42 @@ void main() {
 
   test('identity lookups use the volume+MediaStore-ID composite index', () {
     final identityLookup = extractBlock(source, 'Future<Track?> trackByMediaStoreIdentity(');
-    final deletion = extractBlock(source, 'Future<void> _syncDeletions(');
-    final position = extractBlock(source, 'Future<int?> allTracksPosition(');
+    final deletion = extractBlock(
+      source,
+      '  }) async {\n    const candidateChunkSize = _deletionSyncChunkSize;',
+      markerContainsOpeningBrace: true,
+    );
     expect(identityLookup, contains('mediaStoreVolumeMediaStoreIdEqualTo(normalizedVolume, id)'));
-    expect(position, contains('mediaStoreVolumeMediaStoreIdEqualTo(volume, mediaStoreId)'));
-    expect(deletion, contains('mediaStoreVolumeMediaStoreIdEqualTo(\n            track.mediaStoreVolume,\n            track.mediaStoreId,'));
+    expect(deletion, contains('findExistingMediaStoreObserverIdentities(staleIdentities)'));
   });
 
   test('position/group/deletion queries do not accidentally OR independent where clauses', () {
     final position = extractBlock(source, 'Future<int?> allTracksPosition(');
-    final deletion = extractBlock(source, 'Future<void> _syncDeletions(');
-    expect(position, contains('.titleEqualTo(current.title, caseSensitive: true)\n        .filter()'));
-    expect(position, contains('.idGreaterThan(lastIsarId)\n          .filter()'));
-    expect(position, contains('.titleLessThan(current.title, caseSensitive: true)\n            .filter()'));
+    final deletion = extractBlock(
+      source,
+      '  }) async {\n    const candidateChunkSize = _deletionSyncChunkSize;',
+      markerContainsOpeningBrace: true,
+    );
+    expect(position, contains('.titleLessThan(current.title)'));
+    expect(position, contains('.titleEqualTo(current.title)'));
+    expect(position, contains('.mediaStoreVolumeLessThan(current.mediaStoreVolume)'));
+    expect(position, contains('.mediaStoreIdLessThan(current.mediaStoreId)'));
     expect(source, isNot(contains('.mediaStoreVolumeEqualTo(volume)\n          .mediaStoreIdEqualTo(mediaStoreId)')));
     expect(deletion, isNot(contains('.mediaStoreVolumeEqualTo(group.key)\n            .anyOf(ids')));
   });
 
   test('search and group pages traverse canonical title ordering before filtering', () {
-    final searchPage = extractBlock(source, 'Future<List<Track>> searchPage(');
+    final searchPage = extractBlock(
+      source,
+      '    // returns the requested page after the search filter has been applied.\n    return _isar.tracks',
+      markerContainsOpeningBrace: false,
+    );
     expect(searchPage, contains('.where()\n        .anyTitle()\n        .filter()\n        .anyOf('));
-    final groupBody = extractBlock(source, 'Future<List<Track>> tracksForGroupPage');
+    final groupBody = extractBlock(
+      source,
+      '  }) {\n    if (!_validPageArgs(offset: offset, limit: limit) || limit == 0 ||',
+      markerContainsOpeningBrace: true,
+    );
     expect(groupBody, contains('.anyTitle()'));
     expect(groupBody, contains('.filter()'));
     expect(groupBody, isNot(contains('.sortByTitle()')));

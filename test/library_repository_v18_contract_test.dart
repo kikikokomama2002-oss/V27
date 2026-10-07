@@ -12,20 +12,21 @@ void main() {
       'android/app/src/main/kotlin/com/example/musicplayer/channels/PlayerChannel.kt',
     ).readAsStringSync();
 
-    final reconciliation = extractBlock(repo, 'Future<int> _reconcileMediaStoreChangeIdentitiesLocked');
-    final scanImpl = extractBlock(repo, 'Future<void> _scanAndPersistInternalImpl(');
+    final reconciliation = extractBlock(repo, 'Future<({int deleted, bool recreated})> _reconcileMediaStoreChangeIdentitiesLocked');
+    final scanImpl = extractBlock(repo, '  }) async {\n    var changedAny = false;', markerContainsOpeningBrace: true);
     final recovery = extractBlock(repo, 'if (effectiveReconcileDeletions || forceIdentityReconciliation)');
     final observerHandler = extractBlock(controller, 'if (repo != null) {', markerContainsOpeningBrace: true);
     final identityScanBranch = extractBlock(native, '"scanLibraryIdentities" -> {', markerContainsOpeningBrace: true);
+    final observer = extractBlock(native, 'private fun newMediaStoreObserver()', markerContainsOpeningBrace: true);
 
     expect(reconciliation, contains('mediaStoreVolumeMediaStoreIdEqualTo'));
     expect(reconciliation, contains('reconcileMediaStoreChangeIdentities'));
     expect(observerHandler, contains("rawArgs['identities']"));
-    expect(identityScanBranch, contains('pendingMediaStoreIdentities'));
-    expect(identityScanBranch, contains('ContentUris.parseId(uri)'));
-    expect(identityScanBranch, contains('uri.pathSegments.firstOrNull'));
-    expect(identityScanBranch, contains('Build.VERSION_CODES.Q'));
-    expect(scanImpl, contains('final forceIdentityReconciliation ='));
+    expect(identityScanBranch, contains('MediaStoreScanner.scanAudioIdentities'));
+    expect(observer, contains('ContentUris.parseId(uri)'));
+    expect(observer, contains('uri.pathSegments.firstOrNull'));
+    expect(observer, contains('Build.VERSION_CODES.Q'));
+    expect(scanImpl, contains('final effectiveReconcileDeletions ='));
     expect(recovery, contains("currentVolumeStates[volume]?['generationSupported'] != true"));
     expect(recovery, contains('fullScanVolumes.add(volume);'));
     expect(scanImpl, isNot(contains('final modernReconciliationDue = false')));

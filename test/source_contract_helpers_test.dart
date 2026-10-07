@@ -56,7 +56,7 @@ void target({
   }
 }
 ''';
-    final body = extractBlock(source, 'void target({', markerContainsOpeningBrace: true);
+    final body = extractBlock(source, '}) {', markerContainsOpeningBrace: true);
     expect(body, contains('if (value.isNotEmpty)'));
     expect(body, contains('print(value);'));
   });

@@ -33,7 +33,7 @@ void main() {
   test('BUG-011 embedded reader never converts generic read failure to null', () {
     final source = File(embedded).readAsStringSync();
     final reader = extractBlock(source, 'suspend fun read(context: Context, contentUri: String)');
-    expect(reader, contains('class ProviderException'));
+    expect(source, contains('class ProviderException'));
     expect(reader, contains('throw ProviderException("Embedded lyrics provider failed", e)'));
     expect(reader, isNot(contains('Malformed tags, an unsupported container')));
   });
@@ -51,12 +51,13 @@ void main() {
     final volumeResolver = extractBlock(source, 'private fun resolveTrackVolume(context: Context, volume: String?): String');
     final pathValidator = extractBlock(source, 'private fun validateRelativePath(relativePath: String?): String');
     final findBody = extractBlock(source, 'suspend fun find(');
+    final safBody = extractBlock(source, 'private fun viaSaf(');
     final accessException = extractBlock(source, 'class AccessUnavailableException(');
     expect(accessException, contains('class AccessUnavailableException('));
-    expect(findBody, contains('if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)'));
-    expect(findBody, contains('throw AccessUnavailableException()'));
-    expect(findBody, isNot(contains('if (granted.isEmpty()) return null')));
-    expect(findBody, contains('Track relative path is unavailable; sidecar lookup is indeterminate'));
+    expect(safBody, contains('if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)'));
+    expect(safBody, contains('throw AccessUnavailableException'));
+    expect(safBody, isNot(contains('if (granted.isEmpty()) return null')));
+    expect(pathValidator, contains('Track relative path is unavailable; sidecar lookup is indeterminate'));
     expect(pathValidator, contains('it == ".."'));
     expect(pathValidator, contains('it == "."'));
     expect(pathValidator, contains('Track relative path is invalid; sidecar lookup is indeterminate'));

@@ -29,6 +29,7 @@ int _findCodeMarker(String source, String marker, [int from = 0]) {
     if (tripleQuote) {
       if (n2 == '$quote$quote$quote') {
         tripleQuote = false;
+        quote = '';
         i += 2;
       }
       continue;
@@ -104,6 +105,7 @@ int _findStructuralOpeningBrace(String source, int start, int markerEnd, {requir
     if (tripleQuote) {
       if (n2 == '$quote$quote$quote') {
         tripleQuote = false;
+        quote = '';
         i += 2;
       }
       continue;
@@ -197,6 +199,7 @@ String extractBlock(String source, String marker, {bool markerContainsOpeningBra
     if (tripleQuote) {
       if (n2 == '$quote$quote$quote') {
         tripleQuote = false;
+        quote = '';
         i += 2;
       }
       continue;

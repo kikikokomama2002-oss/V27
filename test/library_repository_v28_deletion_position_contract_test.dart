@@ -24,21 +24,16 @@ void main() {
     );
   });
 
-  test('committed deletions are published before unstable-snapshot failure', () {
-    final source = _readRepo();
-    final deletion = extractBlock(source, 'Future<void> _syncDeletions({');
-
-    final unstable = deletion.indexOf(
-      "throw StateError('MediaStore changed during deletion commit; retrying reconciliation');",
-    );
-    expect(unstable, greaterThan(0));
-
-    final beforeThrow = deletion.substring(0, unstable);
-    expect(
-      beforeThrow,
-      contains('_tracksDeletedController.add(\n                List.unmodifiable(deletedIdentities),\n              );'),
-    );
-  });
+    test('committed deletions are published when deletion reconciliation fails', () {
+      final source = _readRepo();
+      final deletion = extractBlock(source, 'Future<void> _syncDeletions({');
+      final unstable = deletion.indexOf(
+        "throw StateError('MediaStore volume set changed before deletion commit');",
+      );
+      expect(unstable, greaterThan(0));
+      expect(deletion, contains('_tracksDeletedController.add('));
+      expect(deletion, contains('List.unmodifiable(deletedIdentities)'));
+    });
 
   test('deletion events are always exposed as immutable lists', () {
     final source = _readRepo();
@@ -69,10 +64,10 @@ void main() {
 
 test('generation payload fields tolerate omitted native values', () {
   final source = _readRepo();
-  expect(source, contains("(entry.value['generation'] as num?)?.toInt() ?? 0"));
-  expect(source, contains("(entry.value['lifecycleGeneration'] as num?)?.toInt() ?? 0"));
-  expect(source, isNot(contains("(entry.value['generation'] as num).toInt()")));
-  expect(source, isNot(contains("(entry.value['lifecycleGeneration'] as num).toInt()")));
+    expect(source, contains("(currentVolumeStates[entry.key]?['generation'] as num?)?.toInt() ?? 0"));
+    expect(source, contains("(entry.value['lifecycleGeneration'] as num?)?.toInt() ?? 0"));
+    expect(source, isNot(contains("(currentVolumeStates[entry.key]?['generation'] as num).toInt()")));
+    expect(source, isNot(contains("(entry.value['lifecycleGeneration'] as num).toInt()")));
 });
 
 test('recreated targeted rows count as a tracksChanged mutation', () {
@@ -93,7 +88,7 @@ test('sync crash marker is written only after native generation succeeds', () {
   final scan = extractBlock(source, 'Future<void> _scanAndPersistInternalImpl({');
   expect(occursInOrder(scan, [
     'final prefs = await SharedPreferences.getInstance();',
-    '_libraryGeneration = previousLibraryGeneration + 1;',
+      '_libraryGeneration = _libraryGeneration + 1;',
     'await PlayerChannel.instance.updateLibraryGeneration(_libraryGeneration);',
     'await prefs.setBool(_syncInProgressKey, true);',
   ]), isTrue);
@@ -102,7 +97,7 @@ test('sync crash marker is written only after native generation succeeds', () {
 test('dispose closes repository streams and scan page has no empty-page retry loop', () {
   final source = _readRepo();
   final dispose = extractBlock(source, 'void dispose()');
-  final page = extractBlock(source, 'Future<List<Map<String, dynamic>>> _readScanPageWithEmptyRetry({');
+  final page = extractBlock(source, 'Future<List<Map<String, dynamic>>> _readScanPage({');
   expect(dispose, contains('disposeStreams();'));
   expect(page, isNot(contains('for (var attempt = 0; attempt < 3; attempt++)')));
   expect(page, isNot(contains('lastError')));

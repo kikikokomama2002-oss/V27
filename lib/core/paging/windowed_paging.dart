@@ -97,7 +97,7 @@ abstract class WindowedPagingNotifier<T> extends StateNotifier<WindowedPagingSta
   WindowedPagingNotifier({
     this.pageSize = 60,
     this.maxPagesInMemory = 6,
-  }) : super(const WindowedPagingState());
+  }) : super(WindowedPagingState<T>());
 
   /// Fetches one page of [T] — an indexed `offset().limit()` DB query,
   /// implemented by the subclass for whatever query this feed
@@ -157,7 +157,7 @@ abstract class WindowedPagingNotifier<T> extends StateNotifier<WindowedPagingSta
   // Admission bounds physical concurrency, while this bound prevents a
   // pathological scroll/programmatic request burst from accumulating an
   // unbounded queue of distinct page futures behind the four workers.
-  static const int _maxPendingPageRequests = 32;
+  static const int _maxPendingPageRequests = 4;
   final List<Future<void>> _pageAdmissionTails = [
     Future<void>.value(),
     Future<void>.value(),
@@ -447,7 +447,7 @@ abstract class WindowedPagingNotifier<T> extends StateNotifier<WindowedPagingSta
     // completes; its generation check will prevent the stale result from
     // entering the new state, and it will then trigger the new generation's
     // count exactly once.
-    state = const WindowedPagingState();
+    state = WindowedPagingState<T>();
   }
 
   @override

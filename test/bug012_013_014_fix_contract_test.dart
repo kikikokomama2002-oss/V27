@@ -8,7 +8,7 @@ void main() {
   final lyrics = File('$root/android/app/src/main/kotlin/com/example/musicplayer/lyrics/SidecarLyricsResolver.kt').readAsStringSync();
 
   test('BUG-012 observer deletion uses strict validation before destructive reconciliation', () {
-    final observerStart = repository.indexOf('Future<int> _reconcileMediaStoreChangeIdentitiesLocked');
+    final observerStart = repository.indexOf('Future<({int deleted, bool recreated})> _reconcileMediaStoreChangeIdentitiesLocked');
     expect(observerStart, greaterThanOrEqualTo(0));
     final observer = repository.substring(observerStart);
     expect(observer, contains('findExistingMediaStoreIdentities(validationPayload)'));

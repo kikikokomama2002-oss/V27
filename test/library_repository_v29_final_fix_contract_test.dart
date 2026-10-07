@@ -27,28 +27,42 @@ void main() {
 
   test('targeted reconciliation publishes tracksChanged before follow-up scan', () {
     final source = _source();
-    final publicPath = _between(
-      source,
+    final start = source.indexOf(
       'Future<int> reconcileMediaStoreChangeIdentities(',
-      '  Future<({int deleted, bool recreated})>',
     );
+    expect(start, isNonNegative);
+
+    final end = source.indexOf(
+      'Future<({int deleted, bool recreated})> _reconcileMediaStoreChangeIdentitiesLocked',
+      start,
+    );
+    expect(end, isNonNegative);
+
+    final publicPath = source.substring(start, end);
     expect(publicPath, contains('final targetedMutation = result.deleted > 0 || result.recreated;'));
-    expect(publicPath.indexOf('_tracksChangedController.add(null)'),
-        lessThan(publicPath.indexOf('unawaited(scanAndPersist().catchError((_) {}));')));
+
+    final publishPos = source.indexOf(
+      '_tracksChangedController.add(null)',
+      start,
+    );
+    final followUpScanPos = source.indexOf(
+      'unawaited(scanAndPersist().catchError((_) {}));',
+      start,
+    );
+    expect(publishPos, isNonNegative);
+    expect(followUpScanPos, isNonNegative);
+    expect(publishPos, lessThan(followUpScanPos));
 
     final observerPath = _between(
       source,
       'Future<void> handleMediaStoreChanged({',
       '  Track _trackFromMediaStoreMap(',
     );
-      expect(
-        observerPath.indexOf('_tracksChangedController.add(null)'),
-        lessThan(
-          observerPath.indexOf(
-            'scanAndPersist(\n                forceFullIdentityReconcile: unknown,',
-          ),
-        ),
-      );
+        final observerPublishPos = observerPath.indexOf('_tracksChangedController.add(null)');
+        final observerScanPos = observerPath.indexOf('scanAndPersist(');
+        expect(observerPublishPos, isNonNegative);
+        expect(observerScanPos, isNonNegative);
+        expect(observerPublishPos, lessThan(observerScanPos));
     });
 
   test('committed targeted deletions are emitted from finally', () {

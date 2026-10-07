@@ -8,7 +8,7 @@ void main() {
   test('full scans have no timestamp upper bound', () {
     expect(
       source,
-      contains('''untilTimestamp: effectiveVolumeFullScan\n              ? 0\n              : (useGenerationCursor ? 0 : scanUntilSeconds),'''),
+      contains('''untilTimestamp: effectiveVolumeFullScan\n              ? 9223372036854775807\n              : (useGenerationCursor ? 0 : scanUntilSeconds),'''),
     );
     expect(
       source,

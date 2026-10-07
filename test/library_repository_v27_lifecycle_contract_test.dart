@@ -24,9 +24,9 @@ void main() {
     expect(enqueue, contains('_repositorySyncPendingCount++;'));
     expect(enqueue, contains('_repositorySyncPendingCount--;'));
     expect(snapshot, contains('_repositorySyncPendingCount == 0'));
-    expect(snapshot, contains('_pendingScanRequests == 0'));
-    expect(scanApi, contains('_pendingScanRequests++;'));
-    expect(source, contains('_scanInFlight ?? _pendingScanDrain?.future'));
+    expect(snapshot, contains('_pendingScanRequestQueue.isEmpty'));
+    expect(scanApi, contains('_pendingScanRequestQueue.add(request)'));
+    expect(source, contains('_scanInFlight ?? _scanWorkerFuture'));
   });
 
   test('disposed periodic reconciliation cannot cross async boundaries into a scan', () {
@@ -37,7 +37,8 @@ void main() {
     );
 
     expect(occursInOrder(periodic, [
-      'if (_disposed || _periodicDeletionReconciliationInFlight) return;',
+      'if (_disposed) return;',
+      '_periodicDeletionReconciliationInFlight = true;',
       'await SharedPreferences.getInstance();',
       'if (_disposed) return;',
       'await PlayerChannel.instance',
@@ -68,7 +69,7 @@ void main() {
   test('Track mapping is centralized and stale dead-code findings are removed', () {
     final source = _readRepo();
     expect(RegExp(r'\bTrack\(\)').allMatches(source).length, 1);
-    expect(RegExp(r'_trackFromMediaStoreMap\(').allMatches(source).length, 4);
+    expect(RegExp(r'_trackFromMediaStoreMap\(').allMatches(source).length, 3);
     expect(source, isNot(contains('var deletedCount = 0;')));
     expect(source, isNot(contains('return deletedCount;')));
     expect(source, contains('Future<void> _syncDeletions({'));
