@@ -336,7 +336,29 @@ object AlbumArtLoader {
             throw e
         } catch (e: Exception) {
             throw ProviderException("Legacy artwork provider failed", e)
-        } ?: return null
+        } ?: run {
+            val retryBitmap = try {
+                kotlinx.coroutines.withTimeout(ART_LOAD_TIMEOUT_MS) {
+                    runBlockingProvider(
+                        block = {
+                            context.contentResolver.openInputStream(contentUri)?.use { it.readBytes() }
+                        },
+                    )
+                }
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                throw ProviderException("Legacy artwork provider timed out", e)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: ProviderException) {
+                throw e
+            } catch (e: Exception) {
+                throw ProviderException("Legacy artwork provider failed", e)
+            }
+
+            // Legacy thumbnail equivalent: MediaStore.Audio.Thumbnails.MINI_KIND.
+            retryBitmap ?: return@run null
+            retryBitmap
+        }
 
         return try {
             decodeMemorySemaphore.withPermit {
