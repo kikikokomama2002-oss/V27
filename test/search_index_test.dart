@@ -1,12 +1,31 @@
 import 'dart:ffi';
+import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar_community/isar.dart';
 
-import '../lib/data/db/track.dart';
+import 'package:offline_music_player/data/db/track.dart';
 
 void main() {
   final isUnsupportedLinuxArm64 = Abi.current() == Abi.linuxArm64;
+
+  setUpAll(() async {
+    if (Abi.current() != Abi.linuxX64) return;
+
+    final libraryUri = await Isolate.resolvePackageUri(
+      Uri.parse('package:isar_community_flutter_libs/linux/libisar.so'),
+    );
+    if (libraryUri == null) {
+      throw StateError('Could not resolve Isar Core library');
+    }
+
+    await Isar.initializeIsarCore(
+      libraries: <Abi, String>{
+        Abi.linuxX64: File.fromUri(libraryUri).path,
+      },
+    );
+  });
 
   test(
     'searchWords contains Unicode-aware words from title, artist and album',
