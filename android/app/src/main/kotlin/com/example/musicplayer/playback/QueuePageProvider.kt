@@ -86,7 +86,7 @@ class MethodChannelQueuePageProvider(
                             // safely ignored by kotlinx.coroutines, but
                             // the explicit check avoids doing the
                             // `parse()` work for a result nobody reads.
-                            if (cont.isActive) cont.resume(parse(result, offset, limit))
+                            if (cont.isActive) cont.resume(parse(result, offset, limit)) { _ -> }
                         }
 
                         override fun error(
@@ -94,11 +94,11 @@ class MethodChannelQueuePageProvider(
                             errorMessage: String?,
                             errorDetails: Any?
                         ) {
-                            if (cont.isActive) cont.resume(null)
+                            if (cont.isActive) cont.resume(null) { _ -> }
                         }
 
                         override fun notImplemented() {
-                            if (cont.isActive) cont.resume(null)
+                            if (cont.isActive) cont.resume(null) { _ -> }
                         }
                     }
                 )
@@ -150,10 +150,10 @@ class MethodChannelQueuePageProvider(
                     "requestQueuePageAround", args,
                     object : MethodChannel.Result {
                         override fun success(result: Any?) {
-                            if (cont.isActive) cont.resume(parse(result, null, before + after + 1))
+                            if (cont.isActive) cont.resume(parse(result, null, before + after + 1)) { _ -> }
                         }
                         override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
-                            if (cont.isActive) cont.resume(null)
+                            if (cont.isActive) cont.resume(null) { _ -> }
                         }
                         override fun notImplemented() {
                             if (cont.isActive) cont.resume(null) { _ -> }
