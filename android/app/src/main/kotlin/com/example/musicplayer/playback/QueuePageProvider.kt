@@ -156,7 +156,7 @@ class MethodChannelQueuePageProvider(
                             if (cont.isActive) cont.resume(null)
                         }
                         override fun notImplemented() {
-                            if (cont.isActive) cont.resume(null) { _, _, _ -> }
+                            if (cont.isActive) cont.resume(null) { _ -> }
                         }
                     }
                 )
