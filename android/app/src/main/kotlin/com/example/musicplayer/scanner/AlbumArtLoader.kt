@@ -264,8 +264,8 @@ object AlbumArtLoader {
                             // cancelled after this call but before the
                             // continuation is dispatched, Kotlin invokes this
                             // callback and the Bitmap cannot be leaked.
-                            continuation.resume(value) { _, lateValue, _ ->
-                                try { onLateValue(lateValue) } catch (_: Exception) {}
+                            continuation.resume(value) { _ ->
+                                try { onLateValue(value) } catch (_: Exception) {}
                             }
                         }
                     } catch (e: Exception) {
@@ -315,33 +315,16 @@ object AlbumArtLoader {
             }
         }
 
-    @Suppress("DEPRECATION")
     private suspend fun loadLegacyAudioThumbnail(
         context: Context,
         contentUri: Uri,
         sizePx: Int,
     ): ByteArray? {
-        val id = contentUri.lastPathSegment?.toLongOrNull() ?: return null
-        val bitmap = try {
+        val bytes = try {
             kotlinx.coroutines.withTimeout(ART_LOAD_TIMEOUT_MS) {
                 runBlockingProvider(
                     block = {
-                        MediaStore.Audio.Thumbnails.getThumbnail(
-                            context.contentResolver,
-                            id,
-                            MediaStore.Audio.Thumbnails.MINI_KIND,
-                            null,
-                        )
-                    },
-                    onLateValue = { it.recycle() },
-                    onCancel = {
-                        // MediaStore's legacy thumbnail API owns the provider-side
-                        // CancellationSignal. Thread the coroutine timeout/cancel
-                        // into that API instead of relying on Thread.interrupt().
-                        MediaStore.Audio.Thumbnails.cancelThumbnailRequest(
-                            context.contentResolver,
-                            id,
-                        )
+                        context.contentResolver.openInputStream(contentUri)?.use { it.readBytes() }
                     },
                 )
             }
@@ -353,83 +336,29 @@ object AlbumArtLoader {
             throw e
         } catch (e: Exception) {
             throw ProviderException("Legacy artwork provider failed", e)
-        } ?: run {
-            // The legacy API is nullable: null is the only signal available for
-            // both genuine artwork absence and some provider/resource failures.
-            // Do not manufacture a ProviderException from that value, but do not
-            // make a single ambiguous null authoritative either. A bounded second
-            // provider attempt gives transient thumbnail failures a recovery path
-            // while preserving null as the final best-effort absence result.
-            val retryBitmap = try {
-                kotlinx.coroutines.withTimeout(ART_LOAD_TIMEOUT_MS) {
-                    runBlockingProvider(
-                        block = {
-                            MediaStore.Audio.Thumbnails.getThumbnail(
-                                context.contentResolver,
-                                id,
-                                MediaStore.Audio.Thumbnails.MINI_KIND,
-                                null,
-                            )
-                        },
-                        onLateValue = { it.recycle() },
-                        onCancel = {
-                            MediaStore.Audio.Thumbnails.cancelThumbnailRequest(
-                                context.contentResolver,
-                                id,
-                            )
-                        },
-                    )
-                }
-            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                throw ProviderException("Legacy artwork provider timed out", e)
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: ProviderException) {
-                throw e
-            } catch (e: Exception) {
-                throw ProviderException("Legacy artwork provider failed", e)
-            }
-            retryBitmap ?: return@run null
-            retryBitmap
-        }
+        } ?: return null
+
         return try {
             decodeMemorySemaphore.withPermit {
-                // Enforce the decoded-pixel budget before scaleDown() so a huge
-                // provider bitmap cannot cause a second large allocation while
-                // being resized. The budget is expressed in pixels; RGBA byte
-                // accounting is intentionally not multiplied again here.
-                if (bitmap.width.toLong() * bitmap.height.toLong() >
-                    MAX_DECODED_ART_PIXELS
-                ) {
-                    throw ResourceException("Artwork bitmap exceeds memory budget")
-                }
-                val scaled = scaleDown(bitmap, sizePx)
+                val bitmap = decodeSampledBitmap(bytes, sizePx) ?: return@withPermit null
                 try {
-                    if (scaled.width.toLong() * scaled.height.toLong() >
+                    if (bitmap.width.toLong() * bitmap.height.toLong() >
                         MAX_DECODED_ART_PIXELS
                     ) {
                         throw ResourceException("Artwork bitmap exceeds memory budget")
                     }
-                    val png = scaled.toPngBytes()
+                    val png = bitmap.toPngBytes()
                     if (png.size > 8 * 1024 * 1024) {
                         throw ResourceException("Artwork PNG exceeds encoded-size budget")
                     }
                     png
                 } finally {
-                    if (scaled !== bitmap) scaled.recycle()
+                    bitmap.recycle()
                 }
             }
-        } finally {
-            bitmap.recycle()
+        } catch (e: OutOfMemoryError) {
+            throw ResourceException("Artwork decode exhausted memory", e)
         }
-    }
-
-    private fun scaleDown(bitmap: Bitmap, sizePx: Int): Bitmap {
-        if (bitmap.width <= sizePx && bitmap.height <= sizePx) return bitmap
-        val scale = minOf(sizePx.toFloat() / bitmap.width, sizePx.toFloat() / bitmap.height)
-        val width = (bitmap.width * scale).toInt().coerceAtLeast(1)
-        val height = (bitmap.height * scale).toInt().coerceAtLeast(1)
-        return Bitmap.createScaledBitmap(bitmap, width, height, true)
     }
 
     private suspend fun loadViaThumbnail(
