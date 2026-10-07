@@ -6,12 +6,12 @@ import com.example.musicplayer.channels.PLAYER_CHANNEL_NAME
 import com.example.musicplayer.channels.PLAYER_EVENT_CHANNEL_NAME
 import com.example.musicplayer.channels.PlayerChannel
 import com.example.musicplayer.channels.PlayerEventChannel
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
 
     companion object {
         // The SAF picker can outlive an Activity instance during configuration
