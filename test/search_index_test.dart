@@ -1,6 +1,4 @@
 import 'dart:ffi';
-import 'dart:io';
-import 'dart:isolate';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar_community/isar.dart';
@@ -12,19 +10,7 @@ void main() {
 
   setUpAll(() async {
     if (Abi.current() != Abi.linuxX64) return;
-
-    final libraryUri = await Isolate.resolvePackageUri(
-      Uri.parse('package:isar_community_flutter_libs/linux/libisar.so'),
-    );
-    if (libraryUri == null) {
-      throw StateError('Could not resolve Isar Core library');
-    }
-
-    await Isar.initializeIsarCore(
-      libraries: <Abi, String>{
-        Abi.linuxX64: File.fromUri(libraryUri).path,
-      },
-    );
+    await Isar.initializeIsarCore(download: true);
   });
 
   test(
