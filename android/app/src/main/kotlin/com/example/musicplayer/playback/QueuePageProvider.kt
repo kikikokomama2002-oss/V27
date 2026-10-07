@@ -5,7 +5,6 @@ import android.os.Handler
 import android.os.Looper
 import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.atomic.AtomicLong
-import kotlinx.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 /** One page of a [QueueSpec]'s logical result set, resolved by Dart. */
@@ -86,7 +85,7 @@ class MethodChannelQueuePageProvider(
                             // safely ignored by kotlinx.coroutines, but
                             // the explicit check avoids doing the
                             // `parse()` work for a result nobody reads.
-                            if (cont.isActive) cont.resume(parse(result, offset, limit)) { _ -> }
+                            if (cont.isActive) cont.resumeWith(Result.success(parse(result, offset, limit)))
                         }
 
                         override fun error(
@@ -94,11 +93,11 @@ class MethodChannelQueuePageProvider(
                             errorMessage: String?,
                             errorDetails: Any?
                         ) {
-                            if (cont.isActive) cont.resume(null) { _ -> }
+                            if (cont.isActive) cont.resumeWith(Result.success(null))
                         }
 
                         override fun notImplemented() {
-                            if (cont.isActive) cont.resume(null) { _ -> }
+                            if (cont.isActive) cont.resumeWith(Result.success(null))
                         }
                     }
                 )
@@ -150,13 +149,13 @@ class MethodChannelQueuePageProvider(
                     "requestQueuePageAround", args,
                     object : MethodChannel.Result {
                         override fun success(result: Any?) {
-                            if (cont.isActive) cont.resume(parse(result, null, before + after + 1)) { _ -> }
+                            if (cont.isActive) cont.resumeWith(Result.success(parse(result, null, before + after + 1)))
                         }
                         override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
-                            if (cont.isActive) cont.resume(null) { _ -> }
+                            if (cont.isActive) cont.resumeWith(Result.success(null))
                         }
                         override fun notImplemented() {
-                            if (cont.isActive) cont.resume(null) { _ -> }
+                            if (cont.isActive) cont.resumeWith(Result.success(null))
                         }
                     }
                 )

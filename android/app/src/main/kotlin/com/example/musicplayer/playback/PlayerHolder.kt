@@ -361,7 +361,7 @@ object PlayerHolder {
                     .onFailure { /* Async transport failure is contained. */ }
             } finally {
                 synchronized(this@PlayerHolder) {
-                    if (mediaSessionSkipPreviousJob === this.coroutineContext[kotlinx.coroutines.Job]) {
+                    if (mediaSessionSkipPreviousJob === coroutineContext[kotlinx.coroutines.Job]) {
                         mediaSessionSkipPreviousJob = null
                         if (mediaSessionSkipPreviousPendingCount > 0) {
                             mediaSessionSkipPreviousPendingCount--
