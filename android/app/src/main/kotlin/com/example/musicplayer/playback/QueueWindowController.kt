@@ -801,7 +801,7 @@ class QueueWindowController(private val scope: CoroutineScope) {
      * logically. Returns false only once truly at the end of the
      * queue.
      */
-    suspend fun skipNext(): Boolean = transportMutex.withLock {
+    suspend fun skipNext(): Boolean = transportMutex.withLock transportLock@{
         val p = player ?: return@withLock false
         val cid = contextId ?: return@withLock false
         if (p.hasNextMediaItem() && isWindowLibraryGenerationCurrent()) {
@@ -858,15 +858,15 @@ class QueueWindowController(private val scope: CoroutineScope) {
         withMutationLock {
             if (generation != mutationGeneration ||
                 capturedWindowGeneration != windowGeneration ||
-                contextId != cid) return@withLock
-            if (windowLibraryGeneration != currentLibraryGeneration) return@withLock false
+                contextId != cid) return@transportLock
+            if (windowLibraryGeneration != currentLibraryGeneration) return@transportLock false
             if (!isValidPage(result, offset)) {
                 throw IllegalStateException("NEXT_PAGE_INVALID")
             }
             if (result.items.any { identityKey(it.first, it.second) in loadedIds }) {
                 totalCount = result.totalCount
                 needsRebase = true
-                return@withLock
+                return@transportLock
             }
             totalCount = result.totalCount
             p.addMediaItems(result.items.map { (id, uri) -> toMediaItem(id, uri) })
@@ -900,7 +900,7 @@ class QueueWindowController(private val scope: CoroutineScope) {
      * race to insert/seek the same page. Queue mutations still invalidate
      * an in-flight operation through [mutationGeneration].
      */
-    suspend fun skipPrevious(): Boolean = transportMutex.withLock {
+    suspend fun skipPrevious(): Boolean = transportMutex.withLock transportLock@{
         val p = player ?: return@withLock false
         // Admit the external Previous intent before any synchronous or
         // asynchronous branch. Direct seek-to-zero paths are transport
@@ -963,15 +963,15 @@ class QueueWindowController(private val scope: CoroutineScope) {
         withMutationLock {
             if (generation != mutationGeneration ||
                 capturedWindowGeneration != windowGeneration ||
-                contextId != cid) return@withLock
-            if (windowLibraryGeneration != currentLibraryGeneration) return@withLock false
+                contextId != cid) return@transportLock
+            if (windowLibraryGeneration != currentLibraryGeneration) return@transportLock false
             if (!isValidPage(result, offset)) {
                 throw IllegalStateException("PREVIOUS_PAGE_INVALID")
             }
             if (result.items.any { identityKey(it.first, it.second) in loadedIds }) {
                 totalCount = result.totalCount
                 needsRebase = true
-                return@withLock
+                return@transportLock
             }
             totalCount = result.totalCount
             p.addMediaItems(0, result.items.map { (id, uri) -> toMediaItem(id, uri) })
