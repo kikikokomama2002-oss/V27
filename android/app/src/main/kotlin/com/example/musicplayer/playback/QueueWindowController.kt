@@ -336,7 +336,7 @@ class QueueWindowController(private val scope: CoroutineScope) {
         // Native MethodChannel calls can overlap. Serialize the generation
         // check together with the complete installation so A cannot validate,
         // get preempted by B, and then install after B.
-        withMutationLock {
+        return withMutationLock {
             val p = player ?: return@withMutationLock false
             if (expectedLibraryGeneration != currentLibraryGeneration) return@withMutationLock false
             if (queueGenerationEpoch == newQueueGenerationEpoch &&
@@ -431,7 +431,7 @@ class QueueWindowController(private val scope: CoroutineScope) {
     }
 
     /** Re-resolves the native window around a surviving/current identity. */
-    private suspend fun rebaseAfterLibraryMutation(cid: String, removedIds: Set<String>) =
+    private suspend fun rebaseAfterLibraryMutation(cid: String, removedIds: Set<String>): Unit =
         rebaseMutex.withLock {
         val currentPlayer = player ?: return@withLock
         val currentIndex = currentPlayer.currentMediaItemIndex
