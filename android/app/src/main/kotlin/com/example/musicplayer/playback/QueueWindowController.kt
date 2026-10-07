@@ -675,24 +675,24 @@ class QueueWindowController(private val scope: CoroutineScope) {
         forwardFetchJob = scope.launch {
             val result = requestPageWithTimeout(provider, cid, offset, limit) ?: return@launch
             var needsRebase = false
-            withMutationLock {
+            withMutationLock mutationLock@{
                 if (generation != mutationGeneration ||
                     capturedWindowGeneration != windowGeneration ||
-                    contextId != cid) return@withLock
-                val p = player ?: return@withLock
+                    contextId != cid) return@mutationLock
+                val p = player ?: return@mutationLock
                 // Validate untrusted provider data before deriving identities.
                 // identityKey() is intentionally strict and throws for malformed
                 // MediaStore rows; background prefetch must reject such a page,
                 // not turn corrupt data into an uncaught coroutine exception.
-                if (windowLibraryGeneration != currentLibraryGeneration) return@withLock
-                if (!isValidPage(result, offset) || result.libraryGeneration != currentLibraryGeneration) return@withLock
+                if (windowLibraryGeneration != currentLibraryGeneration) return@mutationLock
+                if (!isValidPage(result, offset) || result.libraryGeneration != currentLibraryGeneration) return@mutationLock
                 val overlaps = result.items.any {
                     identityKey(it.first, it.second) in loadedIds
                 }
                 if (overlaps) {
                     totalCount = result.totalCount
                     needsRebase = true
-                    return@withLock
+                    return@mutationLock
                 }
                 totalCount = result.totalCount
                 p.addMediaItems(result.items.map { (id, uri) -> toMediaItem(id, uri) })
@@ -722,24 +722,24 @@ class QueueWindowController(private val scope: CoroutineScope) {
         backwardFetchJob = scope.launch {
             val result = requestPageWithTimeout(provider, cid, offset, limit) ?: return@launch
             var needsRebase = false
-            withMutationLock {
+            withMutationLock mutationLock@{
                 if (generation != mutationGeneration ||
                 capturedWindowGeneration != windowGeneration ||
-                contextId != cid) return@withLock
-                val p = player ?: return@withLock
+                contextId != cid) return@mutationLock
+                val p = player ?: return@mutationLock
                 // Validate untrusted provider data before deriving identities.
                 // identityKey() is intentionally strict and throws for malformed
                 // MediaStore rows; background prefetch must reject such a page,
                 // not turn corrupt data into an uncaught coroutine exception.
-                if (windowLibraryGeneration != currentLibraryGeneration) return@withLock
-                if (!isValidPage(result, offset) || result.libraryGeneration != currentLibraryGeneration) return@withLock
+                if (windowLibraryGeneration != currentLibraryGeneration) return@mutationLock
+                if (!isValidPage(result, offset) || result.libraryGeneration != currentLibraryGeneration) return@mutationLock
                 val overlaps = result.items.any {
                     identityKey(it.first, it.second) in loadedIds
                 }
                 if (overlaps) {
                     totalCount = result.totalCount
                     needsRebase = true
-                    return@withLock
+                    return@mutationLock
                 }
                 totalCount = result.totalCount
                 p.addMediaItems(0, result.items.map { (id, uri) -> toMediaItem(id, uri) })
