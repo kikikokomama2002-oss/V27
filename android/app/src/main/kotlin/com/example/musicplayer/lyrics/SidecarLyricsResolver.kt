@@ -704,7 +704,7 @@ object SidecarLyricsResolver {
                 } ?: continue
 
                 failedCacheKey = "child|${permission.uri}|${DocumentsContract.getDocumentId(dir.uri)}|${"$stem.lrc".lowercase(Locale.ROOT)}|false"
-                val input = context.contentResolver.openInputStream(lyricsName)
+                val input = context.contentResolver.openInputStream(lyricsName.uri)
                     ?: throw ProviderException("SAF lyrics input stream returned null")
                 input.use { stream ->
                     readAllText(stream)?.let { return it }

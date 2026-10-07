@@ -118,7 +118,7 @@ class PlayerChannel(
         return tracked
     }
     @Volatile private var currentLibraryGeneration = 0L
-    private const val MAX_PENDING_MEDIASTORE_IDENTITIES = 1024
+    private val MAX_PENDING_MEDIASTORE_IDENTITIES = 1024
     private val pendingMediaStoreIdentities = ConcurrentHashMap.newKeySet<String>()
     @Volatile private var pendingMediaStoreUnknown = false
     private val mediaStoreObserverRunnable = Runnable {

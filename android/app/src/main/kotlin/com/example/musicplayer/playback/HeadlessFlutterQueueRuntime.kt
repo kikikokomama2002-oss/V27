@@ -36,7 +36,6 @@ class HeadlessFlutterQueueRuntime(private val appContext: Context) : QueuePagePr
             }
         }
         val entrypoint = DartExecutor.DartEntrypoint(
-            appContext.assets,
             "flutter_assets",
             "headlessMain"
         )
