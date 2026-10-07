@@ -358,7 +358,7 @@ object AlbumArtLoader {
             // Legacy thumbnail equivalent: MediaStore.Audio.Thumbnails.MINI_KIND.
             retryBitmap ?: return@run null
             retryBitmap
-        }
+        } ?: return null
 
         return try {
             decodeMemorySemaphore.withPermit {

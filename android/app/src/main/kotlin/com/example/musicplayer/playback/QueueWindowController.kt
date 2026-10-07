@@ -993,12 +993,12 @@ class QueueWindowController(private val scope: CoroutineScope) {
                 return@withLock true
             }
             p.seekTo(0)
-            return@withLock true
+            return@transportLock true
         }
         if (generation != mutationGeneration ||
             capturedTransportStateGeneration != transportStateGeneration ||
             contextId != cid) {
-            return@withLock false
+            return@transportLock false
         }
         if (p.hasPreviousMediaItem()) {
             p.seekToPreviousMediaItem()
