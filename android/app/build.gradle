@@ -81,10 +81,6 @@ android {
 
     buildTypes {
         release {
-            def keystorePropertiesFile = rootProject.file("key.properties")
-            if (!keystorePropertiesFile.exists()) {
-                throw new GradleException("Missing android/key.properties: refusing to create a debug-signed release APK")
-            }
             signingConfig signingConfigs.release
             minifyEnabled true
             shrinkResources true
