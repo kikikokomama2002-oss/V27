@@ -901,35 +901,35 @@ class QueueWindowController(private val scope: CoroutineScope) {
      * an in-flight operation through [mutationGeneration].
      */
     suspend fun skipPrevious(): Boolean = transportMutex.withLock transportLock@{
-        val p = player ?: return@withLock false
+        val p = player ?: return@transportLock false
         // Admit the external Previous intent before any synchronous or
         // asynchronous branch. Direct seek-to-zero paths are transport
         // mutations too and must invalidate an in-flight queue navigation.
         markExternalTransportCommand()
         if (p.currentPosition > RESTART_THRESHOLD_MS) {
             p.seekTo(0)
-            return@withLock true
+            return@transportLock true
         }
         val cid = contextId ?: run {
             p.seekTo(0)
-            return@withLock true
+            return@transportLock true
         }
         if (p.hasPreviousMediaItem() && isWindowLibraryGenerationCurrent()) {
             p.seekToPreviousMediaItem()
-            return@withLock true
+            return@transportLock true
         }
         if (p.hasPreviousMediaItem() && !isWindowLibraryGenerationCurrent()) {
             rebaseAfterLibraryMutation(cid, emptySet())
-            if (contextId != cid) return@withLock false
+            if (contextId != cid) return@transportLock false
             if (isWindowLibraryGenerationCurrent() && p.hasPreviousMediaItem()) {
                 p.seekToPreviousMediaItem()
-                return@withLock true
+                return@transportLock true
             }
         }
 
         if (windowStartLogicalIndex <= 0) {
             p.seekTo(0)
-            return@withLock true
+            return@transportLock true
         }
 
         val provider = pageProvider ?: throw IllegalStateException("PREVIOUS_PAGE_UNAVAILABLE")
@@ -940,13 +940,15 @@ class QueueWindowController(private val scope: CoroutineScope) {
         val offset = windowStartLogicalIndex - limit
         val result = requestPageWithTimeout(provider, cid, offset, limit)
             ?: throw IllegalStateException("PREVIOUS_PAGE_UNAVAILABLE")
+
         if (generation != mutationGeneration ||
             capturedTransportStateGeneration != transportStateGeneration ||
             contextId != cid) {
             // Another real queue/transport mutation won the race. Leave playback
             // untouched rather than acting on stale logical data.
-            return@withLock false
+            return@transportLock false
         }
+
         if (capturedWindowGeneration != windowGeneration) {
             // A successful backward prefetch changed only the physical window
             // generation. Re-evaluate the live player instead of dropping the
@@ -954,25 +956,29 @@ class QueueWindowController(private val scope: CoroutineScope) {
             if (windowLibraryGeneration == currentLibraryGeneration &&
                 p.hasPreviousMediaItem()) {
                 p.seekToPreviousMediaItem()
-                return@withLock true
+                return@transportLock true
             }
-            return@withLock false
+            return@transportLock false
         }
 
         var needsRebase = false
-        withMutationLock {
+        withMutationLock mutationLock@{
             if (generation != mutationGeneration ||
                 capturedWindowGeneration != windowGeneration ||
-                contextId != cid) return@transportLock
-            if (windowLibraryGeneration != currentLibraryGeneration) return@transportLock false
+                contextId != cid) return@mutationLock
+
+            if (windowLibraryGeneration != currentLibraryGeneration) return@mutationLock
+
             if (!isValidPage(result, offset)) {
                 throw IllegalStateException("PREVIOUS_PAGE_INVALID")
             }
+
             if (result.items.any { identityKey(it.first, it.second) in loadedIds }) {
                 totalCount = result.totalCount
                 needsRebase = true
-                return@transportLock
+                return@mutationLock
             }
+
             totalCount = result.totalCount
             p.addMediaItems(0, result.items.map { (id, uri) -> toMediaItem(id, uri) })
             loadedIds.addAll(0, result.items.map { identityKey(it.first, it.second) })
@@ -984,22 +990,24 @@ class QueueWindowController(private val scope: CoroutineScope) {
             if (generation != mutationGeneration ||
                 capturedWindowGeneration != windowGeneration ||
                 contextId != cid) {
-                return@withLock false
+                return@transportLock false
             }
             rebaseAfterLibraryMutation(cid, emptySet())
-            if (contextId != cid) return@withLock false
+            if (contextId != cid) return@transportLock false
             if (p.hasPreviousMediaItem()) {
                 p.seekToPreviousMediaItem()
-                return@withLock true
+                return@transportLock true
             }
             p.seekTo(0)
             return@transportLock true
         }
+
         if (generation != mutationGeneration ||
             capturedTransportStateGeneration != transportStateGeneration ||
             contextId != cid) {
             return@transportLock false
         }
+
         if (p.hasPreviousMediaItem()) {
             p.seekToPreviousMediaItem()
             true
