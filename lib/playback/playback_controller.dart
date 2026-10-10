@@ -548,6 +548,8 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         initialWindow: window,
         windowStartIndex: 0,
         startItemIdentity: '$startVolume:$startId',
+        // Restoring a persisted queue must not start playback on app launch.
+        autoPlay: false,
       );
       if (!_queueGenerationGate.isCurrent(restoreGeneration)) return;
       _activeSpec = spec;

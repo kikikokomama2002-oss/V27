@@ -296,7 +296,8 @@ class QueueWindowController(private val scope: CoroutineScope) {
         startIndexGlobal: Int,
         window: List<Pair<Long, String>>,
         windowStartIndexGlobal: Int,
-        startPositionMs: Long
+        startPositionMs: Long,
+        autoPlay: Boolean = true
     ): Boolean {
         require(newQueueGeneration > 0) { "queue generation must be positive" }
         require(newQueueGenerationEpoch.isNotBlank()) { "queue generation epoch must not be blank" }
@@ -377,7 +378,7 @@ class QueueWindowController(private val scope: CoroutineScope) {
 
             p.setMediaItems(mediaItems, relativeStart, startPositionMs)
             p.prepare()
-            p.playWhenReady = true
+            p.playWhenReady = autoPlay
             return true
         }
     }

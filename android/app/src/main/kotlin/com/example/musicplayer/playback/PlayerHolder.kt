@@ -130,7 +130,8 @@ object PlayerHolder {
         startIndex: Int,
         window: List<Pair<Long, String>>,
         windowStartIndex: Int,
-        startPositionMs: Long
+        startPositionMs: Long,
+        autoPlay: Boolean = true
     ): Boolean {
         player(context) // ensure created
         return queueWindowController.setContext(
@@ -143,6 +144,7 @@ object PlayerHolder {
             window,
             windowStartIndex,
             startPositionMs,
+            autoPlay,
         )
     }
 

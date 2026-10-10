@@ -297,6 +297,7 @@ class PlayerChannel {
     required int windowStartIndex,
     String? startItemIdentity,
     int startPositionMs = 0,
+    bool autoPlay = true,
   }) {
     return _method.invokeMethod('setQueueContext', {
       'contextId': contextId,
@@ -310,6 +311,7 @@ class PlayerChannel {
       'windowStartIndex': windowStartIndex,
       'startItemIdentity': startItemIdentity,
       'startPositionMs': startPositionMs,
+      'autoPlay': autoPlay,
     });
   }
 

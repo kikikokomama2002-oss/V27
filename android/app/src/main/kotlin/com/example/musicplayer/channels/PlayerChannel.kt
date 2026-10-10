@@ -821,6 +821,7 @@ class PlayerChannel(
                     val startItemIdentity = call.argument<String>("startItemIdentity")
                         ?.takeIf { it.isNotBlank() }
                     val startPositionMs = argumentLong(call, "startPositionMs", 0L)
+                    val autoPlay = call.argument<Boolean>("autoPlay") ?: true
                     require(totalCount >= 0) { "totalCount must be non-negative" }
                     require(startIndex >= 0) { "startIndex must be non-negative" }
                     require(windowStartIndex >= 0) { "windowStartIndex must be non-negative" }
@@ -904,6 +905,7 @@ class PlayerChannel(
                             window,
                             windowStartIndex,
                             startPositionMs,
+                            autoPlay,
                         )
                     ) {
                         result.error("STALE_QUEUE", "A newer queue generation is already active", null)
