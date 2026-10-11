@@ -111,6 +111,10 @@ void main() {
       markerContainsOpeningBrace: false,
     );
     expect(searchPage, contains('.where()\n        .anyTitle()\n        .filter()\n        .anyOf('));
+    expect(
+      searchPage,
+      contains('caseSensitive: false'),
+    );
     final groupBody = extractBlock(
       source,
       '  }) {\n    if (!_validPageArgs(offset: offset, limit: limit) || limit == 0 ||',

@@ -1949,7 +1949,10 @@ class LibraryRepository {
         .filter()
         .anyOf(
           terms,
-          (q, term) => q.searchWordsElementStartsWith(term),
+          (q, term) => q.searchWordsElementStartsWith(
+            term,
+            caseSensitive: false,
+          ),
         )
         .offset(offset)
         .limit(limit)
