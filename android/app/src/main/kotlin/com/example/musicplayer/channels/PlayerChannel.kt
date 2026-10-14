@@ -531,7 +531,7 @@ class PlayerChannel(
 
     private fun startService() {
         val intent = Intent(context, PlaybackService::class.java)
-        ContextCompat.startForegroundService(context, intent)
+        context.startService(intent)
     }
 
     private fun argumentLong(call: MethodCall, name: String, default: Long): Long {
@@ -892,7 +892,6 @@ class PlayerChannel(
                             "initial window no longer contains the requested start track"
                         }
                     }
-                    startService()
                     PlayerHolder.ensureQueueController(context, channel)
                     if (!PlayerHolder.setQueueContext(
                             context,
