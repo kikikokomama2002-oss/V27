@@ -102,6 +102,21 @@ class _PendingScanBatch {
 /// writes batched in a single Isar transaction so refreshing a large
 /// library never causes jank in the widget tree.
 class LibraryRepository {
+  final Completer<void> _initialLibraryReadCompleter = Completer<void>();
+
+  void completeInitialLibraryRead() {
+    if (!_initialLibraryReadCompleter.isCompleted) {
+      _initialLibraryReadCompleter.complete();
+    }
+  }
+
+  Future<void> waitForInitialLibraryRead() async {
+    await Future.any<void>([
+      _initialLibraryReadCompleter.future,
+      Future<void>.delayed(const Duration(seconds: 5)),
+    ]);
+  }
+
   /// Hard cap for direct repository search callers (queue specs also enforce this).
   /// This prevents an accidental/untrusted caller from creating an oversized
   /// Isar query even when it bypasses [QueueSpec].

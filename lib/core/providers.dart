@@ -138,6 +138,7 @@ class TracksPagingNotifier extends WindowedPagingNotifier<Track> {
           ? await repo.tracksPage(offset: offset, limit: limit)
           : await repo.searchPage(_query, offset: offset, limit: limit);
       if (generation == repo.libraryGeneration && !repo.scanInProgress) {
+        if (_query.isEmpty) repo.completeInitialLibraryRead();
         return page;
       }
     }
@@ -152,6 +153,9 @@ class TracksPagingNotifier extends WindowedPagingNotifier<Track> {
       final generation = await repo.waitForStableSnapshot();
       final count = _query.isEmpty ? await repo.tracksCount() : await repo.searchCount(_query);
       if (generation == repo.libraryGeneration && !repo.scanInProgress) {
+        if (_query.isEmpty && count == 0) {
+          repo.completeInitialLibraryRead();
+        }
         return count;
       }
     }

@@ -27,8 +27,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 4, vsync: this)
+      ..addListener(_handleTabChange);
     _searchDebounce = Debouncer(const Duration(milliseconds: 250));
+  }
+
+  void _handleTabChange() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _manualRescan() async {
@@ -51,6 +56,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   @override
   void dispose() {
     _searchDebounce.dispose();
+    _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     super.dispose();
   }
@@ -80,9 +86,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: TextField(
+          if (_tabController.index == 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: TextField(
               maxLength: QueueSpec.maxQueryLength,
               maxLengthEnforcement: MaxLengthEnforcement.enforced,
               decoration: InputDecoration(
@@ -484,20 +491,35 @@ class _EmptyStateMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon,
-                size: 64,
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.4)),
-            const SizedBox(height: 16),
-            Text(message, textAlign: TextAlign.center),
-          ],
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight - 48 > 0
+                  ? constraints.maxHeight - 48
+                  : 0,
+            ),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    icon,
+                    size: 64,
+                    color: Theme.of(context)
+                        .colorScheme.primary
+                        .withOpacity(0.4),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(message, textAlign: TextAlign.center),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

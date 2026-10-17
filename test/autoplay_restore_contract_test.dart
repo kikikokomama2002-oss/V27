@@ -20,6 +20,32 @@ void main() {
     expectContains(nativeChannel, '                            autoPlay,');
     expectContains(queueController, 'autoPlay: Boolean = true');
     expectContains(queueController, 'p.playWhenReady = autoPlay');
-    expectNotContains(queueController, 'p.playWhenReady = true');
+    final setContext = extractBlock(queueController, 'fun setContext(');
+    expectNotContains(setContext, 'p.playWhenReady = true');
+  });
+
+  test('Repeat All restarts the windowed queue after the final track ends', () {
+    final queueController = readProjectFile(
+      'android/app/src/main/kotlin/com/example/musicplayer/playback/QueueWindowController.kt',
+    );
+
+    final restart = extractBlock(
+      queueController,
+      'private suspend fun restartFromBeginningIfEnded()',
+    );
+
+    expectContains(
+      queueController,
+      'override fun onPlaybackStateChanged(playbackState: Int)',
+    );
+    expectContains(
+      queueController,
+      'scope.launch { restartFromBeginningIfEnded() }',
+    );
+    expectContains(restart, 'p.playbackState != Player.STATE_ENDED');
+    expectContains(restart, 'currentGlobal + 1 < totalCount');
+    expectContains(restart, 'provider, cid, 0, minOf(FETCH_CHUNK, totalCount)');
+    expectContains(restart, 'p.setMediaItems(');
+    expectContains(restart, 'p.playWhenReady = true');
   });
 }

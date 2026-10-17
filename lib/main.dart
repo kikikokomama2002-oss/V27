@@ -98,6 +98,8 @@ class _StartupGateState extends ConsumerState<_StartupGate> {
           // process, so once this scan succeeds, immediately enqueue the
           // existing serialized deletion-reconciliation pipeline. The second
           // phase is intentionally not awaited by the startup gate.
+          await repository.waitForInitialLibraryRead();
+          await WidgetsBinding.instance.endOfFrame;
           await repository.scanAndPersist();
           await repository.requestStartupDeletionReconciliation();
         } catch (error, stack) {

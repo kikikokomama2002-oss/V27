@@ -183,7 +183,12 @@ class QueueWindowController(private val scope: CoroutineScope) {
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) =
             maybeAdjustWindow()
-    }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_ENDED) {
+                scope.launch { restartFromBeginningIfEnded() }
+            }
+        }
 
     fun attach(exoPlayer: ExoPlayer, provider: QueuePageProvider) {
         withMutationLock {
@@ -641,6 +646,73 @@ class QueueWindowController(private val scope: CoroutineScope) {
 
     /** True if there's more logical queue beyond what's currently loaded/playing. */
     private fun logicalIndexOf(relative: Int) = windowStartLogicalIndex + relative
+
+    /**
+     * Repeat the logical queue from its first page when its final track ends.
+     * The queue is windowed, so ExoPlayer's REPEAT_MODE_ALL alone is insufficient.
+     */
+    private suspend fun restartFromBeginningIfEnded() =
+        transportMutex.withLock endedLock@{
+            val p = player ?: return@endedLock
+            val cid = contextId ?: return@endedLock
+
+            if (p.playbackState != Player.STATE_ENDED || !p.playWhenReady) {
+                return@endedLock
+            }
+            if (totalCount <= 0 || loadedIds.isEmpty()) return@endedLock
+            if (!isWindowLibraryGenerationCurrent()) return@endedLock
+
+            val currentRelative = p.currentMediaItemIndex
+            if (currentRelative !in loadedIds.indices) return@endedLock
+
+            val currentGlobal = logicalIndexOf(currentRelative)
+            if (currentGlobal + 1 < totalCount) return@endedLock
+
+            val provider = pageProvider ?: return@endedLock
+            val generation = mutationGeneration
+            val endedMediaId = p.currentMediaItem?.mediaId
+            val result = requestPageWithTimeout(
+                provider, cid, 0, minOf(FETCH_CHUNK, totalCount)
+            ) ?: return@endedLock
+
+            if (!isValidPage(result, 0)) return@endedLock
+
+            withMutationLock {
+                if (player !== p ||
+                    contextId != cid ||
+                    mutationGeneration != generation ||
+                    windowLibraryGeneration != currentLibraryGeneration ||
+                    result.libraryGeneration != currentLibraryGeneration ||
+                    p.playbackState != Player.STATE_ENDED ||
+                    !p.playWhenReady ||
+                    p.currentMediaItem?.mediaId != endedMediaId
+                ) return@withMutationLock
+
+                // Invalidate outstanding page fetches before replacing the window.
+                forwardFetchJob?.cancel()
+                backwardFetchJob?.cancel()
+                forwardFetchJob = null
+                backwardFetchJob = null
+                mutationGeneration++
+
+                totalCount = result.totalCount
+                windowStartLogicalIndex = result.startIndex
+                loadedIds.clear()
+                loadedIds.addAll(
+                    result.items.map { (id, uri) -> identityKey(id, uri) }
+                )
+                windowLibraryGeneration = result.libraryGeneration
+
+                p.setMediaItems(
+                    result.items.map { (id, uri) -> toMediaItem(id, uri) },
+                    0,
+                    0L
+                )
+                p.prepare()
+                p.playWhenReady = true
+                windowGeneration++
+            }
+        }
 
     private fun maybeAdjustWindow() {
         val p = player ?: return

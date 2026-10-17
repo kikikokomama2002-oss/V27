@@ -57,6 +57,11 @@ class PlaybackService : MediaSessionService() {
                 .setCallback(callback)
                 .build()
         }
+
+        // Register the session with Media3's notification manager.
+        // V27 drives the shared ExoPlayer through MethodChannel rather
+        // than relying on a UI MediaController to register this session.
+        addSession(mediaSession)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession {

@@ -893,6 +893,11 @@ class PlayerChannel(
                         }
                     }
                     PlayerHolder.ensureQueueController(context, channel)
+                    // Start the system-facing service for an autoplay queue.
+                    // Queue restoration with autoPlay=false must stay passive.
+                    if (autoPlay && totalCount > 0) {
+                        startService()
+                    }
                     if (!PlayerHolder.setQueueContext(
                             context,
                             contextId,
