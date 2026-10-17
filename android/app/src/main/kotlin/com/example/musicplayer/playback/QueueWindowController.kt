@@ -189,6 +189,7 @@ class QueueWindowController(private val scope: CoroutineScope) {
                 scope.launch { restartFromBeginningIfEnded() }
             }
         }
+    }
 
     fun attach(exoPlayer: ExoPlayer, provider: QueuePageProvider) {
         withMutationLock {
