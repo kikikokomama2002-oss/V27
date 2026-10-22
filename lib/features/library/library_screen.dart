@@ -2,12 +2,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
+import '../../core/library_tab_settings.dart';
+import '../../core/playlist_store.dart';
 import '../../core/debouncer.dart';
 import '../../core/widgets/track_artwork.dart';
 import '../../data/db/track.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../playback/queue_spec.dart';
 import '../player/mini_player.dart';
+import '../settings/settings_screen.dart';
 
 /// Root library screen: Tracks / Albums / Artists / Folders tabs with a
 /// search field, minimal-tap access to the whole library. A persistent
@@ -21,18 +24,60 @@ class LibraryScreen extends ConsumerStatefulWidget {
 
 class _LibraryScreenState extends ConsumerState<LibraryScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
+  late TabController _tabController;
+  late List<LibraryTab> _visibleTabs;
   late final Debouncer _searchDebounce;
+  late final FocusNode _searchFocusNode;
+  ProviderSubscription<LibraryTabConfig>? _tabConfigSubscription;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this)
+    _searchFocusNode = FocusNode();
+    _visibleTabs = ref.read(libraryTabSettingsProvider).visibleTabs;
+    _tabController = TabController(length: _visibleTabs.length, vsync: this)
       ..addListener(_handleTabChange);
+    _tabConfigSubscription = ref.listenManual<LibraryTabConfig>(
+      libraryTabSettingsProvider,
+      (_, next) => _applyTabConfig(next),
+    );
     _searchDebounce = Debouncer(const Duration(milliseconds: 250));
   }
 
+  void _applyTabConfig(LibraryTabConfig config) {
+    final nextTabs = config.visibleTabs;
+    if (nextTabs.length == _visibleTabs.length &&
+        nextTabs.asMap().entries.every((entry) => entry.value == _visibleTabs[entry.key])) {
+      return;
+    }
+
+    final oldIndex = _tabController.index;
+    final oldTab = _visibleTabs[oldIndex.clamp(0, _visibleTabs.length - 1).toInt()];
+    final matchingIndex = nextTabs.indexOf(oldTab);
+    final nextIndex = matchingIndex >= 0
+        ? matchingIndex
+        : oldIndex.clamp(0, nextTabs.length - 1).toInt();
+
+    _tabController
+      ..removeListener(_handleTabChange)
+      ..dispose();
+    _visibleTabs = nextTabs;
+    _tabController = TabController(
+      length: _visibleTabs.length,
+      vsync: this,
+      initialIndex: nextIndex,
+    )..addListener(_handleTabChange);
+
+    if (_visibleTabs[_tabController.index] != LibraryTab.tracks) {
+      _searchFocusNode.unfocus();
+    }
+    if (mounted) setState(() {});
+  }
+
   void _handleTabChange() {
+    if (_visibleTabs[_tabController.index] != LibraryTab.tracks) {
+      _searchFocusNode.unfocus();
+    }
     if (mounted) setState(() {});
   }
 
@@ -42,20 +87,22 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     try {
       await repo.scanAndPersist(reconcileDeletions: true);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Library scan completed.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Library scan completed.')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Library scan failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Library scan failed: $e')));
     }
   }
 
   @override
   void dispose() {
     _searchDebounce.dispose();
+    _searchFocusNode.dispose();
+    _tabConfigSubscription?.close();
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     super.dispose();
@@ -72,58 +119,81 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             tooltip: 'Rescan library',
             onPressed: _manualRescan,
           ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+              );
+            },
+          ),
         ],
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: false,
-          tabs: const [
-            Tab(text: 'Tracks'),
-            Tab(text: 'Albums'),
-            Tab(text: 'Artists'),
-            Tab(text: 'Folders'),
-          ],
+          isScrollable: _visibleTabs.length > 3,
+          tabs: _visibleTabs
+              .map((tab) => Tab(text: tab.label))
+              .toList(growable: false),
         ),
       ),
       body: Column(
         children: [
-          if (_tabController.index == 0)
+          if (_visibleTabs[_tabController.index] == LibraryTab.tracks)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: TextField(
-              maxLength: QueueSpec.maxQueryLength,
-              maxLengthEnforcement: MaxLengthEnforcement.enforced,
-              decoration: InputDecoration(
-                hintText: 'Search tracks…',
-                prefixIcon: const Icon(Icons.search),
-                filled: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+                focusNode: _searchFocusNode,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => _searchFocusNode.unfocus(),
+                onTapOutside: (_) => _searchFocusNode.unfocus(),
+                maxLength: QueueSpec.maxQueryLength,
+                maxLengthEnforcement: MaxLengthEnforcement.enforced,
+                decoration: InputDecoration(
+                  hintText: 'Search tracks…',
+                  prefixIcon: const Icon(Icons.search),
+                  filled: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
+                onChanged: (v) {
+                  _searchDebounce.call(() {
+                    if (!mounted) return;
+                    ref.read(searchQueryProvider.notifier).state = v;
+                  });
+                },
               ),
-              onChanged: (v) {
-                _searchDebounce.call(() {
-                  if (!mounted) return;
-                  ref.read(searchQueryProvider.notifier).state = v;
-                });
-              },
             ),
-          ),
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: const [
-                _TracksTab(),
-                _GroupedTab(groupBy: GroupField.album, icon: Icons.album_outlined),
-                _GroupedTab(groupBy: GroupField.artist, icon: Icons.person_outline),
-                _GroupedTab(groupBy: GroupField.folder, icon: Icons.folder_outlined),
-              ],
+              children: _visibleTabs.map(_pageForTab).toList(growable: false),
             ),
           ),
           const MiniPlayer(),
         ],
       ),
     );
+  }
+
+  Widget _pageForTab(LibraryTab tab) {
+    return switch (tab) {
+      LibraryTab.tracks => const _TracksTab(),
+      LibraryTab.albums => const _GroupedTab(
+        groupBy: GroupField.album,
+        icon: Icons.album_outlined,
+      ),
+      LibraryTab.artists => const _GroupedTab(
+        groupBy: GroupField.artist,
+        icon: Icons.person_outline,
+      ),
+      LibraryTab.folders => const _GroupedTab(
+        groupBy: GroupField.folder,
+        icon: Icons.folder_outlined,
+      ),
+    };
   }
 }
 
@@ -152,9 +222,7 @@ class _TracksTabState extends ConsumerState<_TracksTab> {
     final totalCount = paging.totalCount;
 
     if (paging.countError != null) {
-      return _PagingCountError(
-        onRetry: notifier.retryCount,
-      );
+      return _PagingCountError(onRetry: notifier.retryCount);
     }
     if (totalCount == null) {
       return const Center(child: CircularProgressIndicator());
@@ -165,8 +233,9 @@ class _TracksTabState extends ConsumerState<_TracksTab> {
           ? const _EmptyLibraryState()
           : _EmptySearchState(query: query);
     }
-    final QueueSpec spec =
-        query.isEmpty ? const AllTracksQueueSpec() : SearchQueueSpec(query);
+    final QueueSpec spec = query.isEmpty
+        ? const AllTracksQueueSpec()
+        : SearchQueueSpec(query);
 
     return ListView.builder(
       itemCount: totalCount,
@@ -175,7 +244,9 @@ class _TracksTabState extends ConsumerState<_TracksTab> {
         if (track == null) {
           final error = notifier.pageErrorAt(index);
           if (error != null) {
-            return _PagingPageError(onRetry: () => notifier.retryPage(index ~/ notifier.pageSize));
+            return _PagingPageError(
+              onRetry: () => notifier.retryPage(index ~/ notifier.pageSize),
+            );
           }
           return const _LoadingRow();
         }
@@ -188,7 +259,12 @@ class _TracksTabState extends ConsumerState<_TracksTab> {
           // the full result set; see PlaybackController.playQueue.
           onTap: () => ref
               .read(playbackControllerProvider.notifier)
-              .playQueue(spec, startIndex: index, startVolume: track.mediaStoreVolume, startMediaStoreId: track.mediaStoreId),
+              .playQueue(
+                spec,
+                startIndex: index,
+                startVolume: track.mediaStoreVolume,
+                startMediaStoreId: track.mediaStoreId,
+              ),
         );
       },
     );
@@ -217,9 +293,7 @@ class _GroupedTabState extends ConsumerState<_GroupedTab> {
     final totalCount = paging.totalCount;
 
     if (paging.countError != null) {
-      return _PagingCountError(
-        onRetry: notifier.retryCount,
-      );
+      return _PagingCountError(onRetry: notifier.retryCount);
     }
     if (totalCount == null) {
       return const Center(child: CircularProgressIndicator());
@@ -235,7 +309,9 @@ class _GroupedTabState extends ConsumerState<_GroupedTab> {
         if (group == null) {
           final error = notifier.pageErrorAt(index);
           if (error != null) {
-            return _PagingPageError(onRetry: () => notifier.retryPage(index ~/ notifier.pageSize));
+            return _PagingPageError(
+              onRetry: () => notifier.retryPage(index ~/ notifier.pageSize),
+            );
           }
           return const _LoadingRow();
         }
@@ -275,7 +351,11 @@ class _GroupTileState extends State<_GroupTile> {
   Widget build(BuildContext context) {
     return ExpansionTile(
       leading: Icon(widget.icon),
-      title: Text(widget.group.displayName, maxLines: 1, overflow: TextOverflow.ellipsis),
+      title: Text(
+        widget.group.displayName,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       subtitle: Text('${widget.group.trackCount} tracks'),
       onExpansionChanged: (open) => setState(() => _expanded = open),
       children: _expanded
@@ -283,7 +363,7 @@ class _GroupTileState extends State<_GroupTile> {
               _GroupTracksList(
                 groupKey: GroupKey(widget.field, widget.group.name),
                 trackCount: widget.group.trackCount,
-              )
+              ),
             ]
           : const [],
     );
@@ -339,17 +419,18 @@ class _GroupTracksList extends ConsumerWidget {
             // `notifier` — Next/Previous walk the complete group.
             onTap: () => ref
                 .read(playbackControllerProvider.notifier)
-                .playQueue(GroupQueueSpec(groupKey.field, groupKey.name),
-                    startIndex: i,
-                    startVolume: track.mediaStoreVolume,
-                    startMediaStoreId: track.mediaStoreId),
+                .playQueue(
+                  GroupQueueSpec(groupKey.field, groupKey.name),
+                  startIndex: i,
+                  startVolume: track.mediaStoreVolume,
+                  startMediaStoreId: track.mediaStoreId,
+                ),
           );
         },
       ),
     );
   }
 }
-
 
 class _PagingCountError extends StatelessWidget {
   const _PagingCountError({required this.onRetry});
@@ -416,7 +497,7 @@ class _LoadingRow extends StatelessWidget {
   }
 }
 
-class _TrackTile extends StatelessWidget {
+class _TrackTile extends ConsumerWidget {
   const _TrackTile({required this.track, required this.onTap});
   final Track track;
   final VoidCallback onTap;
@@ -430,16 +511,22 @@ class _TrackTile extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return ListTile(
       leading: TrackArtwork(
         contentUri: track.contentUri,
         version: Object.hash(
           track.derivedCacheEpoch,
           track.mediaStoreGenerationModified ?? track.dateModified,
-          track.dateModified, track.contentUri, track.relativePath,
-          track.displayName, track.durationMs, track.title, track.artist,
-          track.album, track.folder,
+          track.dateModified,
+          track.contentUri,
+          track.relativePath,
+          track.displayName,
+          track.durationMs,
+          track.title,
+          track.artist,
+          track.album,
+          track.folder,
         ),
         size: 44,
         // Small list-row thumbnails: request a small decode size too, so
@@ -449,12 +536,115 @@ class _TrackTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text('${track.artist} • ${track.album}',
-          maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: Text(_fmtDuration(track.durationMs)),
+      subtitle: Text(
+        '${track.artist} • ${track.album}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(_fmtDuration(track.durationMs)),
+          PopupMenuButton<String>(
+            tooltip: 'Track options',
+            onSelected: (action) {
+              if (action == 'add_to_playlist') {
+                _addTrackToPlaylist(context, ref, track);
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'add_to_playlist',
+                child: Text('Add to playlist'),
+              ),
+            ],
+          ),
+        ],
+      ),
       onTap: onTap,
     );
   }
+}
+
+Future<String?> _playlistNamePrompt(BuildContext context) async {
+  final controller = TextEditingController();
+  final result = await showDialog<String>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Create playlist'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        maxLength: 60,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: const InputDecoration(labelText: 'Playlist name'),
+        onSubmitted: (value) => Navigator.pop(dialogContext, value.trim()),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text.trim()), child: const Text('Create')),
+      ],
+    ),
+  );
+  controller.dispose();
+  return result;
+}
+
+Future<void> _addTrackToPlaylist(
+  BuildContext context,
+  WidgetRef ref,
+  Track track,
+) async {
+  final store = ref.read(playlistStoreProvider.notifier);
+  await store.ready;
+  if (!context.mounted) return;
+  final state = ref.read(playlistStoreProvider);
+  const createAction = '__create_playlist__';
+  final selectedId = await showModalBottomSheet<String>(
+    context: context,
+    builder: (sheetContext) => SafeArea(
+      child: ListView(
+        shrinkWrap: true,
+        children: [
+          const ListTile(title: Text('Add song to playlist')),
+          ...state.playlists.map((playlist) => ListTile(
+            leading: const Icon(Icons.queue_music),
+            title: Text(playlist.name),
+            subtitle: Text('${playlist.songs.length} songs'),
+            onTap: () => Navigator.pop(sheetContext, playlist.id),
+          )),
+          ListTile(
+            leading: const Icon(Icons.add),
+            title: const Text('Create playlist…'),
+            onTap: () => Navigator.pop(sheetContext, createAction),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (selectedId == null || !context.mounted) return;
+  var playlistId = selectedId;
+  if (selectedId == createAction) {
+    final name = await _playlistNamePrompt(context);
+    if (name == null || !context.mounted) return;
+    final created = await store.createPlaylist(name);
+    if (created == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Playlist name is empty or already used.')),
+      );
+      return;
+    }
+    playlistId = created.id;
+  }
+  final added = await store.addTrack(playlistId, track);
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(added
+          ? 'Added “${track.title}” to playlist.'
+          : 'This song is already in that playlist.'),
+    ),
+  );
 }
 
 class _EmptyLibraryState extends StatelessWidget {
@@ -464,7 +654,8 @@ class _EmptyLibraryState extends StatelessWidget {
   Widget build(BuildContext context) {
     return const _EmptyStateMessage(
       icon: Icons.library_music_outlined,
-      message: 'No music found yet.\nTap the refresh icon to scan your device, or check storage permissions.',
+      message:
+          'No music found yet.\nTap the refresh icon to scan your device, or check storage permissions.',
     );
   }
 }
@@ -508,9 +699,9 @@ class _EmptyStateMessage extends StatelessWidget {
                   Icon(
                     icon,
                     size: 64,
-                    color: Theme.of(context)
-                        .colorScheme.primary
-                        .withOpacity(0.4),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.4),
                   ),
                   const SizedBox(height: 16),
                   Text(message, textAlign: TextAlign.center),

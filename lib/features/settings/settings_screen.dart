@@ -1,0 +1,1160 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../../playback/player_channel.dart';
+
+import '../../core/theme_mode_provider.dart';
+import '../../core/library_tab_settings.dart';
+import '../../core/permissions.dart';
+import '../../core/playlist_store.dart';
+import '../../core/providers.dart';
+import '../../data/db/track.dart';
+import '../../playback/queue_spec.dart';
+
+class SettingsScreen extends ConsumerStatefulWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  static const _speedPreferenceKey = 'v27_playback_speed_v1';
+  static const _speeds = <double>[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+
+  double _speed = 1.0;
+  bool _speedLoaded = false;
+  bool _skipSilence = false;
+  bool _skipSilenceLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSpeed();
+    _loadSkipSilence();
+  }
+
+  Future<void> _loadSkipSilence() async {
+    try {
+      final enabled = await PlayerChannel.instance.getSkipSilenceEnabled();
+      if (!mounted) return;
+      setState(() {
+        _skipSilence = enabled;
+        _skipSilenceLoaded = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _skipSilenceLoaded = true);
+    }
+  }
+
+  Future<void> _changeSkipSilence(bool enabled) async {
+    final previous = _skipSilence;
+    setState(() => _skipSilence = enabled);
+    try {
+      await PlayerChannel.instance.setSkipSilenceEnabled(enabled);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _skipSilence = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not change silence skipping.')),
+      );
+    }
+  }
+
+  Future<void> _loadSpeed() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getDouble(_speedPreferenceKey) ?? 1.0;
+      final speed = _speeds.reduce(
+        (a, b) => (a - saved).abs() <= (b - saved).abs() ? a : b,
+      );
+      await PlayerChannel.instance.setPlaybackSpeed(speed);
+      if (!mounted) return;
+      setState(() {
+        _speed = speed;
+        _speedLoaded = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _speedLoaded = true);
+    }
+  }
+
+  Future<void> _changeSpeed(double? value) async {
+    if (value == null) return;
+    final previous = _speed;
+    setState(() => _speed = value);
+    try {
+      await PlayerChannel.instance.setPlaybackSpeed(value);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_speedPreferenceKey, value);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _speed = previous);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not change playback speed.')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ref = this.ref;
+    final isDark = ref.watch(themeModeProvider) == ThemeMode.dark;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Settings')),
+      body: ListView(
+        children: [
+          _sectionTitle(context, 'Playback'),
+          const _SleepTimerSetting(),
+          ListTile(
+            leading: const Icon(Icons.speed),
+            title: const Text('Play speed'),
+            subtitle: Text(_speedLoaded ? '${_speed.toString()}x' : 'Loading…'),
+            trailing: DropdownButton<double>(
+              value: _speeds.contains(_speed) ? _speed : 1.0,
+              onChanged: _speedLoaded ? _changeSpeed : null,
+              items: _speeds.map((speed) {
+                return DropdownMenuItem<double>(
+                  value: speed,
+                  child: Text('${speed.toString()}x'),
+                );
+              }).toList(),
+            ),
+          ),
+          const _CrossfadeSetting(),
+          SwitchListTile(
+            secondary: const Icon(Icons.volume_down_outlined),
+            title: const Text('Skip silence'),
+            subtitle: const Text('Automatically skip silent sections within tracks.'),
+            value: _skipSilence,
+            onChanged: _skipSilenceLoaded ? _changeSkipSilence : null,
+          ),
+          _NativeSwitchSetting(
+            icon: Icons.lock_outline,
+            title: 'Control music from Lock screen',
+            subtitle: 'Show or hide transport buttons in system media controls.',
+            load: PlayerChannel.instance.getLockScreenControlsEnabled,
+            save: PlayerChannel.instance.setLockScreenControlsEnabled,
+          ),
+          _sectionTitle(context, 'Playlists'),
+          const _QueueSettingsSetting(),
+          const _AvoidDuplicateSongsSetting(),
+          const _ManagePlaylistsSetting(),
+          _sectionTitle(context, 'General'),
+          SwitchListTile(
+            secondary: const Icon(Icons.dark_mode_outlined),
+            title: const Text('Dark mode'),
+            subtitle: Text(isDark ? 'On' : 'Off'),
+            value: isDark,
+            onChanged: (value) {
+              ref.read(themeModeProvider.notifier).setDarkMode(value);
+            },
+          ),
+          const _ManageTabsSetting(),
+          _NativeSwitchSetting(
+            icon: Icons.devices,
+            title: 'Allow external devices to start playback',
+            subtitle: 'Allow other media apps and connected controllers to resume paused music.',
+            load: PlayerChannel.instance.getExternalDeviceStartEnabled,
+            save: PlayerChannel.instance.setExternalDeviceStartEnabled,
+          ),
+          _sectionTitle(context, 'Privacy'),
+          const _PermissionsSetting(),
+          _sectionTitle(context, 'About'),
+          ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: const Text('About'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => showAboutDialog(
+              context: context,
+              applicationName: 'V27',
+              applicationVersion: '1.0.0+1',
+              applicationLegalese: 'Offline music player for local audio files.',
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.mail_outline),
+            title: const Text('Contact us'),
+            subtitle: const Text('Share feedback using an app on your device.'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () async {
+              try {
+                await PlayerChannel.instance.openContactComposer();
+              } catch (_) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Could not open a feedback app.')),
+                );
+              }
+            },
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionTitle(BuildContext context, String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 22, 16, 8),
+      child: Text(
+        title.toUpperCase(),
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+          color: Theme.of(context).colorScheme.primary,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.1,
+        ),
+      ),
+    );
+  }
+}
+
+class _SleepTimerSetting extends StatefulWidget {
+  const _SleepTimerSetting();
+
+  @override
+  State<_SleepTimerSetting> createState() => _SleepTimerSettingState();
+}
+
+class _SleepTimerSettingState extends State<_SleepTimerSetting> {
+  static const _presets = <int>[5, 10, 15, 30, 45, 60];
+
+  // The native playback service owns the actual deadline and pause callback.
+  // This Dart timer only refreshes the visible countdown while this tile is
+  // mounted, so leaving Settings no longer cancels the sleep timer.
+  Timer? _ticker;
+  DateTime? _deadline;
+  int? _selectedMinutes;
+  int _remainingSeconds = 0;
+  bool _loading = true;
+
+  bool get _active => _deadline != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedTimer();
+  }
+
+  Future<void> _loadSavedTimer() async {
+    try {
+      final deadlineMs = await PlayerChannel.instance.getSleepTimerDeadline();
+      if (!mounted) return;
+      if (deadlineMs == null) {
+        setState(() {
+          _deadline = null;
+          _remainingSeconds = 0;
+          _loading = false;
+        });
+        return;
+      }
+      final deadline = DateTime.fromMillisecondsSinceEpoch(deadlineMs);
+      final remaining = deadline.difference(DateTime.now()).inSeconds;
+      if (remaining <= 0) {
+        setState(() {
+          _deadline = null;
+          _remainingSeconds = 0;
+          _loading = false;
+        });
+        return;
+      }
+      _applyDeadline(deadline, selectedMinutes: null);
+      if (mounted) setState(() => _loading = false);
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _applyDeadline(DateTime deadline, {required int? selectedMinutes}) {
+    _ticker?.cancel();
+    final remaining = deadline.difference(DateTime.now()).inSeconds;
+    if (remaining <= 0) {
+      setState(() {
+        _deadline = null;
+        _selectedMinutes = null;
+        _remainingSeconds = 0;
+        _loading = false;
+      });
+      return;
+    }
+    setState(() {
+      _deadline = deadline;
+      _selectedMinutes = selectedMinutes;
+      _remainingSeconds = remaining;
+      _loading = false;
+    });
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      final activeDeadline = _deadline;
+      if (activeDeadline == null) {
+        _ticker?.cancel();
+        return;
+      }
+      final nextRemaining = activeDeadline.difference(DateTime.now()).inSeconds;
+      if (nextRemaining <= 0) {
+        _ticker?.cancel();
+        _ticker = null;
+        if (mounted) {
+          setState(() {
+            _deadline = null;
+            _selectedMinutes = null;
+            _remainingSeconds = 0;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Sleep timer finished. Playback paused.'),
+            ),
+          );
+        }
+      } else if (mounted) {
+        setState(() => _remainingSeconds = nextRemaining);
+      }
+    });
+  }
+
+  Future<void> _startTimer(int minutes) async {
+    final deadline = DateTime.now().add(Duration(minutes: minutes));
+    try {
+      await PlayerChannel.instance.setSleepTimerDeadline(
+        deadline.millisecondsSinceEpoch,
+      );
+      if (!mounted) return;
+      _applyDeadline(deadline, selectedMinutes: minutes);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not start the sleep timer.')),
+      );
+    }
+  }
+
+  Future<void> _cancelTimer() async {
+    try {
+      await PlayerChannel.instance.cancelSleepTimer();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not cancel the sleep timer.')),
+        );
+      }
+      return;
+    }
+    _ticker?.cancel();
+    _ticker = null;
+    if (mounted) {
+      setState(() {
+        _deadline = null;
+        _selectedMinutes = null;
+        _remainingSeconds = 0;
+      });
+    }
+  }
+
+  Future<void> _chooseCustomDuration() async {
+    final controller = TextEditingController(
+      text: _selectedMinutes?.toString() ?? '20',
+    );
+
+    final minutes = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Custom sleep timer'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Minutes',
+            helperText: 'Enter a duration from 1 to 720 minutes.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text.trim());
+              if (value == null || value < 1 || value > 720) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Enter a whole number from 1 to 720.'),
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(dialogContext, value);
+            },
+            child: const Text('Start'),
+          ),
+        ],
+      ),
+    );
+
+    controller.dispose();
+
+    if (minutes != null && mounted) {
+      await _startTimer(minutes);
+    }
+  }
+
+  String get _remainingLabel {
+    final minutes = _remainingSeconds ~/ 60;
+    final seconds = _remainingSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')} remaining';
+  }
+
+  @override
+  void dispose() {
+    // Cancel only the UI ticker. The native deadline deliberately survives.
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const Icon(Icons.bedtime_outlined),
+      title: const Text('Sleep timer'),
+      subtitle: Text(
+        _loading
+            ? 'Loading timer…'
+            : (_active ? _remainingLabel : 'Stop playback after a set time'),
+      ),
+      trailing: _active
+          ? IconButton(
+              tooltip: 'Cancel sleep timer',
+              onPressed: _cancelTimer,
+              icon: const Icon(Icons.close),
+            )
+          : const Icon(Icons.chevron_right),
+      onTap: () async {
+        final choice = await showModalBottomSheet<int>(
+          context: context,
+          builder: (sheetContext) => SafeArea(
+            child: Wrap(
+              children: [
+                const ListTile(title: Text('Stop playback after')),
+                ..._presets.map(
+                  (minutes) => ListTile(
+                    leading: const Icon(Icons.timer_outlined),
+                    title: Text('$minutes minutes'),
+                    onTap: () => Navigator.pop(sheetContext, minutes),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.edit_outlined),
+                  title: const Text('Custom duration…'),
+                  onTap: () => Navigator.pop(sheetContext, -1),
+                ),
+                if (_active)
+                  ListTile(
+                    leading: const Icon(Icons.close),
+                    title: const Text('Cancel active timer'),
+                    onTap: () => Navigator.pop(sheetContext, 0),
+                  ),
+              ],
+            ),
+          ),
+        );
+
+        if (!mounted || choice == null) return;
+        if (choice == -1) {
+          await _chooseCustomDuration();
+        } else if (choice == 0) {
+          await _cancelTimer();
+        } else {
+          await _startTimer(choice);
+        }
+      },
+    );
+  }
+}
+
+class _ManageTabsSetting extends StatelessWidget {
+  const _ManageTabsSetting();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const Icon(Icons.tab),
+      title: const Text('Manage tabs'),
+      subtitle: const Text('Choose which library tabs appear and reorder them.'),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const _ManageTabsScreen()),
+      ),
+    );
+  }
+}
+
+class _ManageTabsScreen extends ConsumerWidget {
+  const _ManageTabsScreen();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final config = ref.watch(libraryTabSettingsProvider);
+    final controller = ref.read(libraryTabSettingsProvider.notifier);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Manage tabs')),
+      body: ListView(
+        padding: const EdgeInsets.only(bottom: 24),
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text('Drag to change the order. Turn off tabs you do not use.'),
+          ),
+          ReorderableListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            buildDefaultDragHandles: false,
+            itemCount: config.order.length,
+            onReorderItem: controller.reorder,
+            itemBuilder: (context, index) {
+              final tab = config.order[index];
+              final isVisible = config.visible.contains(tab);
+              return ListTile(
+                key: ValueKey<String>('library-tab-${tab.name}'),
+                leading: ReorderableDragStartListener(
+                  index: index,
+                  child: const Icon(Icons.drag_handle),
+                ),
+                title: Text(tab.label),
+                trailing: Switch(
+                  value: isVisible,
+                  onChanged: (value) => controller.setVisible(tab, value),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PermissionsSetting extends StatelessWidget {
+  const _PermissionsSetting();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const Icon(Icons.security_outlined),
+      title: const Text('Permissions'),
+      subtitle: const Text('Check audio-library and notification access.'),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => showDialog<void>(
+        context: context,
+        builder: (_) => const _PermissionsDialog(),
+      ),
+    );
+  }
+}
+
+class _PermissionsDialog extends StatefulWidget {
+  const _PermissionsDialog();
+
+  @override
+  State<_PermissionsDialog> createState() => _PermissionsDialogState();
+}
+
+class _PermissionsDialogState extends State<_PermissionsDialog> with WidgetsBindingObserver {
+  String _audioStatus = 'Checking…';
+  String _notificationStatus = 'Checking…';
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refresh();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refresh());
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  String _describe(PermissionStatus status) {
+    if (status.isGranted || status.isLimited) return 'Allowed';
+    if (status.isPermanentlyDenied || status.isRestricted) {
+      return 'Blocked in system settings';
+    }
+    return 'Not granted';
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final audio = await Permission.audio.status;
+      final storage = await Permission.storage.status;
+      final notifications = await Permission.notification.status;
+      if (!mounted) return;
+      setState(() {
+        _audioStatus = _describe(audio.isGranted ? audio : storage);
+        _notificationStatus = _describe(notifications);
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _audioStatus = 'Could not read status';
+          _notificationStatus = 'Could not read status';
+        });
+      }
+    }
+  }
+
+  Future<void> _request() async {
+    setState(() => _busy = true);
+    try {
+      await PermissionsHelper.requestAudioPermission();
+      await PermissionsHelper.requestNotificationPermission();
+      await _refresh();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not request permissions.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('App permissions'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.library_music_outlined),
+            title: const Text('Music library'),
+            subtitle: Text(_audioStatus),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.notifications_outlined),
+            title: const Text('Notifications'),
+            subtitle: Text(_notificationStatus),
+          ),
+          const SizedBox(height: 4),
+          const Text('Notification permission is optional for scanning music, but affects playback notifications on supported Android versions.'),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () async {
+            try {
+              await openAppSettings();
+              if (mounted) await _refresh();
+            } catch (_) {
+              if (!mounted) return;
+              ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                const SnackBar(content: Text('Could not open system settings.')),
+              );
+            }
+          },
+          child: const Text('Open settings'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _request,
+          child: Text(_busy ? 'Checking…' : 'Request permissions'),
+        ),
+      ],
+    );
+  }
+}
+
+typedef _BoolSettingLoader = Future<bool> Function();
+typedef _BoolSettingSaver = Future<void> Function(bool value);
+
+class _NativeSwitchSetting extends StatefulWidget {
+  const _NativeSwitchSetting({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.load,
+    required this.save,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final _BoolSettingLoader load;
+  final _BoolSettingSaver save;
+
+  @override
+  State<_NativeSwitchSetting> createState() => _NativeSwitchSettingState();
+}
+
+class _NativeSwitchSettingState extends State<_NativeSwitchSetting> {
+  bool _value = true;
+  bool _loaded = false;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final value = await widget.load();
+      if (!mounted) return;
+      setState(() {
+        _value = value;
+        _loaded = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true);
+    }
+  }
+
+  Future<void> _setValue(bool value) async {
+    final previous = _value;
+    setState(() {
+      _value = value;
+      _saving = true;
+    });
+    try {
+      await widget.save(value);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _value = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update ${widget.title.toLowerCase()}.')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => SwitchListTile(
+    secondary: Icon(widget.icon),
+    title: Text(widget.title),
+    subtitle: Text(_saving ? 'Saving…' : widget.subtitle),
+    value: _value,
+    onChanged: _loaded && !_saving ? _setValue : null,
+  );
+}
+
+class _CrossfadeSetting extends StatelessWidget {
+  const _CrossfadeSetting();
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    leading: const Icon(Icons.shuffle),
+    title: const Text('Crossfade between tracks'),
+    subtitle: const Text('Not enabled yet — needs a dedicated dual-audio transition engine.'),
+    trailing: const Icon(Icons.info_outline),
+    onTap: () => showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Crossfade is not ready yet'),
+        content: const Text(
+          'V27 currently uses one ExoPlayer with a paged queue. A true crossfade needs two audio streams and coordinated queue transitions. A simple volume fade could restart a song or break Next/Previous, so this option stays disabled until that engine can be implemented and tested safely.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _QueueSettingsSetting extends StatelessWidget {
+  const _QueueSettingsSetting();
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    leading: const Icon(Icons.queue_music),
+    title: const Text('Queue settings'),
+    subtitle: const Text('Repeat the current track and tune Previous behavior.'),
+    trailing: const Icon(Icons.chevron_right),
+    onTap: () => Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const _QueueSettingsScreen()),
+    ),
+  );
+}
+
+class _QueueSettingsScreen extends StatefulWidget {
+  const _QueueSettingsScreen();
+
+  @override
+  State<_QueueSettingsScreen> createState() => _QueueSettingsScreenState();
+}
+
+class _QueueSettingsScreenState extends State<_QueueSettingsScreen> {
+  bool _repeatCurrent = false;
+  bool _loaded = false;
+  int _restartThreshold = 3;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final values = await Future.wait<Object>([
+        PlayerChannel.instance.getRepeatCurrentTrackEnabled(),
+        PlayerChannel.instance.getPreviousRestartThresholdSeconds(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _repeatCurrent = values[0] as bool;
+        _restartThreshold = values[1] as int;
+        _loaded = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true);
+    }
+  }
+
+  Future<void> _setRepeatCurrent(bool enabled) async {
+    final previous = _repeatCurrent;
+    setState(() { _repeatCurrent = enabled; _saving = true; });
+    try {
+      await PlayerChannel.instance.setRepeatCurrentTrackEnabled(enabled);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _repeatCurrent = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update repeat setting.')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _setRestartThreshold(int? seconds) async {
+    if (seconds == null) return;
+    final previous = _restartThreshold;
+    setState(() { _restartThreshold = seconds; _saving = true; });
+    try {
+      await PlayerChannel.instance.setPreviousRestartThresholdSeconds(seconds);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _restartThreshold = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update Previous behavior.')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Queue settings')),
+    body: ListView(
+      children: [
+        SwitchListTile(
+          secondary: const Icon(Icons.repeat_one),
+          title: const Text('Repeat current track'),
+          subtitle: const Text('Replay the same track automatically when it ends.'),
+          value: _repeatCurrent,
+          onChanged: _loaded && !_saving ? _setRepeatCurrent : null,
+        ),
+        ListTile(
+          leading: const Icon(Icons.skip_previous),
+          title: const Text('Restart current track when Previous is pressed'),
+          subtitle: const Text('If the track is past this point, Previous restarts it; otherwise it goes to the previous track.'),
+          trailing: DropdownButton<int>(
+            value: const [0, 3, 5, 10].contains(_restartThreshold) ? _restartThreshold : 3,
+            onChanged: _loaded && !_saving ? _setRestartThreshold : null,
+            items: const [0, 3, 5, 10].map((seconds) => DropdownMenuItem<int>(
+              value: seconds,
+              child: Text('$seconds s'),
+            )).toList(),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _AvoidDuplicateSongsSetting extends ConsumerWidget {
+  const _AvoidDuplicateSongsSetting();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(playlistStoreProvider);
+    return SwitchListTile(
+      secondary: const Icon(Icons.library_add_check_outlined),
+      title: const Text("Don't allow duplicate songs"),
+      subtitle: const Text('Prevent the same track from being added to a playlist twice.'),
+      value: state.avoidDuplicateSongs,
+      onChanged: state.isLoading
+          ? null
+          : (value) => ref.read(playlistStoreProvider.notifier).setAvoidDuplicateSongs(value),
+    );
+  }
+}
+
+class _ManagePlaylistsSetting extends StatelessWidget {
+  const _ManagePlaylistsSetting();
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    leading: const Icon(Icons.playlist_play),
+    title: const Text('Manage playlists'),
+    subtitle: const Text('Create playlists, rename them and manage their songs.'),
+    trailing: const Icon(Icons.chevron_right),
+    onTap: () => Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const _ManagePlaylistsScreen()),
+    ),
+  );
+}
+
+Future<String?> _showPlaylistNameDialog(
+  BuildContext context, {
+  String title = 'Create playlist',
+  String initialValue = '',
+}) async {
+  final controller = TextEditingController(text: initialValue);
+  final name = await showDialog<String>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(title),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        maxLength: 60,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: const InputDecoration(labelText: 'Playlist name'),
+        onSubmitted: (value) => Navigator.pop(dialogContext, value.trim()),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text.trim()), child: const Text('Save')),
+      ],
+    ),
+  );
+  controller.dispose();
+  return name;
+}
+
+Future<void> _createPlaylistFromUi(BuildContext context, WidgetRef ref) async {
+  final name = await _showPlaylistNameDialog(context);
+  if (name == null || !context.mounted) return;
+  final created = await ref.read(playlistStoreProvider.notifier).createPlaylist(name);
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(created == null ? 'Playlist name is empty or already used.' : 'Playlist created.')),
+  );
+}
+
+class _ManagePlaylistsScreen extends ConsumerWidget {
+  const _ManagePlaylistsScreen();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(playlistStoreProvider);
+    final store = ref.read(playlistStoreProvider.notifier);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Manage playlists'),
+        actions: [
+          IconButton(
+            tooltip: 'Create playlist',
+            icon: const Icon(Icons.add),
+            onPressed: state.isLoading ? null : () => _createPlaylistFromUi(context, ref),
+          ),
+        ],
+      ),
+      body: state.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : state.playlists.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.queue_music, size: 52),
+                        const SizedBox(height: 12),
+                        const Text('You have no playlists yet.'),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed: () => _createPlaylistFromUi(context, ref),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Create playlist'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: state.playlists.length,
+                  itemBuilder: (context, index) {
+                    final playlist = state.playlists[index];
+                    return ListTile(
+                      leading: const Icon(Icons.queue_music),
+                      title: Text(playlist.name),
+                      subtitle: Text('${playlist.songs.length} songs'),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => _PlaylistDetailsScreen(playlistId: playlist.id),
+                        ),
+                      ),
+                      trailing: PopupMenuButton<String>(
+                        onSelected: (action) async {
+                          if (action == 'rename') {
+                            final name = await _showPlaylistNameDialog(
+                              context,
+                              title: 'Rename playlist',
+                              initialValue: playlist.name,
+                            );
+                            if (name == null || !context.mounted) return;
+                            final ok = await store.renamePlaylist(playlist.id, name);
+                            if (!context.mounted) return;
+                            if (!ok) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Playlist name is empty or already used.')),
+                              );
+                            }
+                          } else if (action == 'delete') {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (dialogContext) => AlertDialog(
+                                title: const Text('Delete playlist?'),
+                                content: Text('Delete “${playlist.name}”? The audio files will not be deleted.'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+                                  FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Delete')),
+                                ],
+                              ),
+                            );
+                            if (confirm == true) await store.deletePlaylist(playlist.id);
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'rename', child: Text('Rename')),
+                          PopupMenuItem(value: 'delete', child: Text('Delete')),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+    );
+  }
+}
+
+class _PlaylistDetailsScreen extends ConsumerWidget {
+  const _PlaylistDetailsScreen({required this.playlistId});
+  final String playlistId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(playlistStoreProvider);
+    UserPlaylist? playlist;
+    for (final item in state.playlists) {
+      if (item.id == playlistId) {
+        playlist = item;
+        break;
+      }
+    }
+    final repo = ref.watch(libraryRepositoryProvider);
+    final currentPlaylist = playlist;
+    if (currentPlaylist == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Playlist')),
+        body: const Center(child: Text('This playlist no longer exists.')),
+      );
+    }
+    if (repo == null) {
+      return Scaffold(
+        appBar: AppBar(title: Text(currentPlaylist.name)),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: Text(currentPlaylist.name)),
+      body: FutureBuilder<List<Track>>(
+        future: repo.tracksForMediaStoreIdentities(
+          currentPlaylist.songs
+              .map((song) => (volume: song.volume, id: song.mediaStoreId))
+              .toList(growable: false),
+        ),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return const Center(child: Text('Could not load playlist tracks.'));
+          }
+          final tracks = snapshot.data ?? const <Track>[];
+          final tracksByIdentity = <String, Track>{
+            for (final track in tracks)
+              '${track.mediaStoreVolume}:${track.mediaStoreId}': track,
+          };
+          if (currentPlaylist.songs.isEmpty) {
+            return const Center(child: Text('This playlist is empty.'));
+          }
+          return ListView.builder(
+            itemCount: currentPlaylist.songs.length,
+            itemBuilder: (context, index) {
+              final identity = currentPlaylist.songs[index];
+              final track = tracksByIdentity[identity.key];
+              return ListTile(
+                leading: Icon(track == null ? Icons.music_off_outlined : Icons.music_note),
+                title: Text(
+                  track?.title ?? 'Unavailable track',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  track == null
+                      ? 'No longer in your library'
+                      : '${track.artist} • ${track.album}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: track == null
+                    ? null
+                    : () => ref.read(playbackControllerProvider.notifier).playQueue(
+                        PlaylistQueueSpec(playlistId),
+                        startIndex: index,
+                        startVolume: track.mediaStoreVolume,
+                        startMediaStoreId: track.mediaStoreId,
+                      ),
+                trailing: IconButton(
+                  tooltip: 'Remove from playlist',
+                  icon: const Icon(Icons.remove_circle_outline),
+                  onPressed: () => ref.read(playlistStoreProvider.notifier).removeTrackAt(
+                    playlistId,
+                    index,
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}

@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'playback_state.dart';
 
@@ -344,6 +343,52 @@ class PlayerChannel {
       _method.invokeMethod<void>('clearQueueContextIfMatches', {
         'contextId': contextId,
       });
+
+  Future<void> setPlaybackSpeed(double speed) =>
+      _method.invokeMethod<void>('setPlaybackSpeed', {'speed': speed});
+
+  Future<bool> getLockScreenControlsEnabled() async =>
+      await _method.invokeMethod<bool>('getLockScreenControlsEnabled') ?? true;
+
+  Future<void> setLockScreenControlsEnabled(bool enabled) =>
+      _method.invokeMethod<void>('setLockScreenControlsEnabled', {'enabled': enabled});
+
+  Future<bool> getExternalDeviceStartEnabled() async =>
+      await _method.invokeMethod<bool>('getExternalDeviceStartEnabled') ?? true;
+
+  Future<void> setExternalDeviceStartEnabled(bool enabled) =>
+      _method.invokeMethod<void>('setExternalDeviceStartEnabled', {'enabled': enabled});
+
+  Future<bool> getRepeatCurrentTrackEnabled() async =>
+      await _method.invokeMethod<bool>('getRepeatCurrentTrackEnabled') ?? false;
+
+  Future<void> setRepeatCurrentTrackEnabled(bool enabled) =>
+      _method.invokeMethod<void>('setRepeatCurrentTrackEnabled', {'enabled': enabled});
+
+  Future<int> getPreviousRestartThresholdSeconds() async =>
+      await _method.invokeMethod<int>('getPreviousRestartThresholdSeconds') ?? 3;
+
+  Future<void> setPreviousRestartThresholdSeconds(int seconds) =>
+      _method.invokeMethod<void>('setPreviousRestartThresholdSeconds', {'seconds': seconds});
+
+  Future<void> openContactComposer() =>
+      _method.invokeMethod<void>('openContactComposer');
+
+  Future<bool> getSkipSilenceEnabled() async =>
+      await _method.invokeMethod<bool>('getSkipSilenceEnabled') ?? false;
+
+  Future<void> setSkipSilenceEnabled(bool enabled) =>
+      _method.invokeMethod<void>('setSkipSilenceEnabled', {'enabled': enabled});
+
+  /// Absolute epoch-millisecond deadline; null means no active sleep timer.
+  Future<int?> getSleepTimerDeadline() =>
+      _method.invokeMethod<int>('getSleepTimerDeadline');
+
+  Future<void> setSleepTimerDeadline(int deadlineMs) =>
+      _method.invokeMethod<void>('setSleepTimerDeadline', {'deadlineMs': deadlineMs});
+
+  Future<void> cancelSleepTimer() =>
+      _method.invokeMethod<void>('cancelSleepTimer');
 
   Future<void> play() => _method.invokeMethod('play');
   Future<void> pause() => _method.invokeMethod('pause');

@@ -1,6 +1,9 @@
 package com.example.musicplayer.playback
 
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionResult
@@ -21,22 +24,73 @@ import androidx.media3.common.Player
  * expansion/trim, which only adds/removes items, never rebuilds the
  * playlist.
  */
+@OptIn(UnstableApi::class)
 class PlaybackService : MediaSessionService() {
+
+    companion object {
+        @Volatile private var activeService: PlaybackService? = null
+        private val mainHandler = Handler(Looper.getMainLooper())
+
+        /** Refreshes lock-screen/notification commands when the user changes its setting. */
+        @JvmStatic
+        fun refreshNotificationCommands() {
+            val service = activeService ?: return
+            mainHandler.post { service.applyNotificationCommands() }
+        }
+    }
 
     private lateinit var mediaSession: MediaSession
 
     override fun onCreate() {
         super.onCreate()
+        activeService = this
         // PlayerHolder.player(context) lazily creates the ExoPlayer if it
         // doesn't exist yet, so this is safe regardless of whether a
         // MethodChannel call already created it first.
         val callback = object : MediaSession.Callback {
+            override fun onConnect(
+                session: MediaSession,
+                controller: MediaSession.ControllerInfo,
+            ): MediaSession.ConnectionResult {
+                val base = super.onConnect(session, controller)
+                if (!base.isAccepted) return base
+                if (session.isMediaNotificationController(controller) &&
+                    !PlayerHolder.isLockScreenControlsEnabled(this@PlaybackService)
+                ) {
+                    return MediaSession.ConnectionResult.accept(
+                        base.availableSessionCommands,
+                        withoutTransportCommands(base.availablePlayerCommands),
+                    )
+                }
+                return base
+            }
+
+            override fun onPostConnect(
+                session: MediaSession,
+                controller: MediaSession.ControllerInfo,
+            ) {
+                if (session.isMediaNotificationController(controller)) {
+                    applyNotificationCommands()
+                }
+            }
+
             @Suppress("DEPRECATION")
             override fun onPlayerCommandRequest(
                 session: MediaSession,
                 controller: MediaSession.ControllerInfo,
                 playerCommand: Int,
             ): Int {
+                val currentPlayer = PlayerHolder.peek()
+                val isExternalController = controller.packageName != packageName &&
+                    !session.isMediaNotificationController(controller)
+                val isStartCommand = playerCommand == Player.COMMAND_PLAY_PAUSE ||
+                    playerCommand == Player.COMMAND_PREPARE
+                if (isExternalController && isStartCommand && currentPlayer?.playWhenReady != true &&
+                    !PlayerHolder.isExternalDeviceStartEnabled(this@PlaybackService)
+                ) {
+                    return SessionResult.RESULT_ERROR_PERMISSION_DENIED
+                }
+
                 return when (playerCommand) {
                     Player.COMMAND_SEEK_TO_NEXT,
                     Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
@@ -82,7 +136,46 @@ class PlaybackService : MediaSessionService() {
         super.onTaskRemoved(rootIntent)
     }
 
+    @OptIn(UnstableApi::class)
+    private fun applyNotificationCommands() {
+        if (!::mediaSession.isInitialized) return
+        val notificationController = mediaSession.mediaNotificationControllerInfo ?: return
+        val isConnected = mediaSession.connectedControllers.any {
+            mediaSession.isMediaNotificationController(it)
+        }
+        if (!isConnected) return
+
+        val playerCommands = PlayerHolder.peek()?.availableCommands ?: return
+        val effectiveCommands = if (PlayerHolder.isLockScreenControlsEnabled(this)) {
+            playerCommands
+        } else {
+            withoutTransportCommands(playerCommands)
+        }
+        // V27 has no custom session commands; the standard Media3 commands
+        // remain available while player transport actions are hidden.
+        runCatching {
+            mediaSession.setAvailableCommands(
+                notificationController,
+                MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS,
+                effectiveCommands,
+            )
+        }
+    }
+
+    private fun withoutTransportCommands(commands: Player.Commands): Player.Commands =
+        commands.buildUpon()
+            .remove(Player.COMMAND_PLAY_PAUSE)
+            .remove(Player.COMMAND_PREPARE)
+            .remove(Player.COMMAND_STOP)
+            .remove(Player.COMMAND_SEEK_TO_NEXT)
+            .remove(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+            .remove(Player.COMMAND_SEEK_TO_PREVIOUS)
+            .remove(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+            .remove(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+            .build()
+
     override fun onDestroy() {
+        if (activeService === this) activeService = null
         // MediaSessionService lifetime is not the same as the Flutter engine
         // or the process-wide PlayerHolder lifetime. Android/Media3 may destroy
         // an idle service while the Flutter controller and its logical queue are

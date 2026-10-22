@@ -5,8 +5,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'core/permissions.dart';
 import 'core/providers.dart';
 import 'core/theme.dart';
+import 'core/theme_mode_provider.dart';
 import 'features/library/library_screen.dart';
-import 'headless_main.dart';
 
 // MobileAds.instance.initialize() removed for the pure offline MVP
 // release — see lib/ads_iap/README.md to reintroduce.
@@ -16,17 +16,18 @@ Future<void> main() async {
   runApp(const ProviderScope(child: OfflineMusicPlayerApp()));
 }
 
-class OfflineMusicPlayerApp extends StatelessWidget {
+class OfflineMusicPlayerApp extends ConsumerWidget {
   const OfflineMusicPlayerApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeModeProvider);
     return MaterialApp(
       title: 'Offline Music Player',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.amoledDark(),
-      themeMode: ThemeMode.dark,
+      themeMode: themeMode,
       home: const _StartupGate(),
     );
   }
@@ -102,7 +103,7 @@ class _StartupGateState extends ConsumerState<_StartupGate> {
           await WidgetsBinding.instance.endOfFrame;
           await repository.scanAndPersist();
           await repository.requestStartupDeletionReconciliation();
-        } catch (error, stack) {
+        } catch (error) {
           if (mounted) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (!mounted) return;
@@ -139,10 +140,7 @@ class _StartupGateState extends ConsumerState<_StartupGate> {
                 const SizedBox(height: 16),
                 Text(_startupError!, textAlign: TextAlign.center),
                 const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: _bootstrap,
-                  child: const Text('Retry'),
-                ),
+                FilledButton(onPressed: _bootstrap, child: const Text('Retry')),
               ],
             ),
           ),
@@ -171,9 +169,9 @@ class _StartupGateState extends ConsumerState<_StartupGate> {
                 ),
                 if (_permissionPermanentlyDenied) ...[
                   const SizedBox(height: 8),
-                  TextButton(
+                  const TextButton(
                     onPressed: openAppSettings,
-                    child: const Text('Open app settings'),
+                    child: Text('Open app settings'),
                   ),
                 ],
               ],
@@ -184,9 +182,7 @@ class _StartupGateState extends ConsumerState<_StartupGate> {
     }
 
     if (!_ready) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return const LibraryScreen();

@@ -1,6 +1,9 @@
 package com.example.musicplayer.playback
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -65,6 +68,43 @@ object PlayerHolder {
     private var mediaSessionSkipPreviousPendingCount = 0
     private var headlessQueueRuntime: HeadlessFlutterQueueRuntime? = null
 
+    private const val PLAYBACK_SETTINGS_PREFS = "v27_playback_settings"
+    private const val SKIP_SILENCE_KEY = "skip_silence_enabled"
+    private const val SLEEP_TIMER_DEADLINE_KEY = "sleep_timer_deadline_ms"
+    private const val LOCK_SCREEN_CONTROLS_KEY = "lock_screen_controls_enabled"
+    private const val EXTERNAL_DEVICE_START_KEY = "external_device_start_enabled"
+    private const val REPEAT_CURRENT_TRACK_KEY = "repeat_current_track_enabled"
+    private const val PREVIOUS_RESTART_THRESHOLD_SECONDS_KEY = "previous_restart_threshold_seconds"
+    private val sleepTimerHandler = Handler(Looper.getMainLooper())
+    private var sleepTimerDeadlineMs: Long? = null
+    private var sleepTimerContext: Context? = null
+    private var sleepTimerInitialized = false
+    private val sleepTimerRunnable = object : Runnable {
+        override fun run() {
+            val remainingMs: Long
+            synchronized(this@PlayerHolder) {
+                val deadline = sleepTimerDeadlineMs ?: return
+                remainingMs = deadline - System.currentTimeMillis()
+                if (remainingMs <= 0L) {
+                    sleepTimerDeadlineMs = null
+                    sleepTimerContext
+                        ?.getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+                        ?.edit()
+                        ?.remove(SLEEP_TIMER_DEADLINE_KEY)
+                        ?.apply()
+                    // Do not initialize a player solely because a timer expired.
+                    _player?.playWhenReady = false
+                    return
+                }
+            }
+            // Use a single bounded delayed callback rather than a one-second
+            // loop. The Flutter UI owns its own countdown display only; this
+            // process-level deadline survives leaving Settings / detaching the
+            // Flutter engine and is restored when the process starts again.
+            sleepTimerHandler.postDelayed(this, remainingMs)
+        }
+    }
+
     /**
      * The live ExoPlayer instance. Always safe to call — lazily
      * initializes on first access from any thread/entry point (service
@@ -73,7 +113,22 @@ object PlayerHolder {
      */
     @Synchronized
     fun player(context: Context): ExoPlayer {
-        return _player ?: buildPlayer(context.applicationContext).also { _player = it }
+        val appContext = context.applicationContext
+        val existing = _player
+        val currentPlayer = if (existing != null) {
+            restoreSleepTimer(appContext)
+            existing
+        } else {
+            buildPlayer(appContext).also {
+                _player = it
+                restoreSleepTimer(appContext)
+            }
+        }
+        val settings = appContext.getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+        queueWindowController.setPreviousRestartThresholdMs(
+            settings.getInt(PREVIOUS_RESTART_THRESHOLD_SECONDS_KEY, 3).coerceIn(0, 10) * 1000L,
+        )
+        return currentPlayer
     }
 
     /**
@@ -95,7 +150,16 @@ object PlayerHolder {
             )
             .setSkipSilenceEnabled(false)
             .build()
-        player.repeatMode = Player.REPEAT_MODE_OFF
+        val playbackPrefs = context
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+        val savedSpeed = playbackPrefs
+            .getFloat("playback_speed", 1.0f)
+            .coerceIn(0.5f, 2.0f)
+        val skipSilenceEnabled = playbackPrefs.getBoolean(SKIP_SILENCE_KEY, false)
+        val repeatCurrentTrack = playbackPrefs.getBoolean(REPEAT_CURRENT_TRACK_KEY, false)
+        player.setPlaybackSpeed(savedSpeed)
+        player.setSkipSilenceEnabled(skipSilenceEnabled)
+        player.repeatMode = if (repeatCurrentTrack) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         return player
     }
 
@@ -210,6 +274,147 @@ object PlayerHolder {
     }
 
     @Synchronized
+    fun setPlaybackSpeed(context: Context, speed: Float) {
+        require(speed.isFinite() && speed in 0.5f..2.0f) {
+            "speed must be between 0.5 and 2.0"
+        }
+        context.applicationContext
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat("playback_speed", speed)
+            .apply()
+        player(context).setPlaybackSpeed(speed)
+    }
+
+    @Synchronized
+    fun isLockScreenControlsEnabled(context: Context): Boolean =
+        context.applicationContext
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .getBoolean(LOCK_SCREEN_CONTROLS_KEY, true)
+
+    @Synchronized
+    fun setLockScreenControlsEnabled(context: Context, enabled: Boolean) {
+        context.applicationContext
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(LOCK_SCREEN_CONTROLS_KEY, enabled)
+            .apply()
+        PlaybackService.refreshNotificationCommands()
+    }
+
+    @Synchronized
+    fun isExternalDeviceStartEnabled(context: Context): Boolean =
+        context.applicationContext
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .getBoolean(EXTERNAL_DEVICE_START_KEY, true)
+
+    @Synchronized
+    fun setExternalDeviceStartEnabled(context: Context, enabled: Boolean) {
+        context.applicationContext
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(EXTERNAL_DEVICE_START_KEY, enabled)
+            .apply()
+    }
+
+    @Synchronized
+    fun isRepeatCurrentTrackEnabled(context: Context): Boolean =
+        context.applicationContext
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .getBoolean(REPEAT_CURRENT_TRACK_KEY, false)
+
+    @Synchronized
+    fun setRepeatCurrentTrackEnabled(context: Context, enabled: Boolean) {
+        context.applicationContext
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(REPEAT_CURRENT_TRACK_KEY, enabled)
+            .apply()
+        player(context).repeatMode = if (enabled) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+    }
+
+    @Synchronized
+    fun getPreviousRestartThresholdSeconds(context: Context): Int =
+        context.applicationContext
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .getInt(PREVIOUS_RESTART_THRESHOLD_SECONDS_KEY, 3)
+            .coerceIn(0, 10)
+
+    @Synchronized
+    fun setPreviousRestartThresholdSeconds(context: Context, seconds: Int) {
+        require(seconds in 0..10) { "previous restart threshold must be between 0 and 10 seconds" }
+        context.applicationContext
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(PREVIOUS_RESTART_THRESHOLD_SECONDS_KEY, seconds)
+            .apply()
+        queueWindowController.setPreviousRestartThresholdMs(seconds * 1000L)
+    }
+
+    @Synchronized
+    fun isSkipSilenceEnabled(context: Context): Boolean =
+        context.applicationContext
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .getBoolean(SKIP_SILENCE_KEY, false)
+
+    @Synchronized
+    fun setSkipSilenceEnabled(context: Context, enabled: Boolean) {
+        context.applicationContext
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(SKIP_SILENCE_KEY, enabled)
+            .apply()
+        player(context).setSkipSilenceEnabled(enabled)
+    }
+
+    /** Returns the persisted stop deadline and restores its process-level callback. */
+    @Synchronized
+    fun getSleepTimerDeadline(context: Context): Long? {
+        restoreSleepTimer(context.applicationContext)
+        return sleepTimerDeadlineMs
+    }
+
+    /** Sets an absolute epoch-millisecond deadline; null disables the timer. */
+    @Synchronized
+    fun setSleepTimerDeadline(context: Context, deadlineMs: Long?) {
+        val appContext = context.applicationContext
+        sleepTimerContext = appContext
+        sleepTimerInitialized = true
+        sleepTimerHandler.removeCallbacks(sleepTimerRunnable)
+        val prefs = appContext.getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+        if (deadlineMs == null) {
+            sleepTimerDeadlineMs = null
+            prefs.edit().remove(SLEEP_TIMER_DEADLINE_KEY).apply()
+            return
+        }
+        val remainingMs = deadlineMs - System.currentTimeMillis()
+        require(remainingMs in 1L..(12L * 60L * 60L * 1000L)) {
+            "sleep timer deadline must be within the next 12 hours"
+        }
+        sleepTimerDeadlineMs = deadlineMs
+        prefs.edit().putLong(SLEEP_TIMER_DEADLINE_KEY, deadlineMs).apply()
+        sleepTimerHandler.postDelayed(sleepTimerRunnable, deadlineMs - System.currentTimeMillis())
+    }
+
+    /** Loads a deadline once per process and schedules a native callback. */
+    @Synchronized
+    private fun restoreSleepTimer(context: Context) {
+        if (sleepTimerInitialized) return
+        sleepTimerInitialized = true
+        val appContext = context.applicationContext
+        sleepTimerContext = appContext
+        val prefs = appContext.getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+        val deadline = prefs.getLong(SLEEP_TIMER_DEADLINE_KEY, 0L)
+        if (deadline <= System.currentTimeMillis()) {
+            prefs.edit().remove(SLEEP_TIMER_DEADLINE_KEY).apply()
+            sleepTimerDeadlineMs = null
+            return
+        }
+        sleepTimerDeadlineMs = deadline
+        sleepTimerHandler.postDelayed(sleepTimerRunnable, deadline - System.currentTimeMillis())
+    }
+
+    @Synchronized
     fun play(context: Context) {
         player(context).playWhenReady = true
     }
@@ -307,7 +512,9 @@ object PlayerHolder {
         val job = queueScope.launch(start = CoroutineStart.LAZY) {
             try {
                 runCatching { queueWindowController.skipNext() }
-                    .onFailure { /* Async transport failure is contained. */ }
+                    .onFailure { error ->
+                        Log.e("V27Playback", "Notification NEXT failed", error)
+                    }
             } finally {
                 synchronized(this@PlayerHolder) {
                     if (mediaSessionSkipNextJob === this.coroutineContext[kotlinx.coroutines.Job]) {
@@ -328,7 +535,7 @@ object PlayerHolder {
         synchronized(this) {
             if (queueWindowController.currentContextId() == null) return null
             val p = _player ?: return SessionResult.RESULT_ERROR_INVALID_STATE
-            if (p.currentPosition > 3000L) {
+            if (queueWindowController.shouldRestartCurrentTrack(p.currentPosition)) {
                 queueWindowController.markExternalTransportCommand()
                 p.seekTo(0)
                 return SessionResult.RESULT_SUCCESS
@@ -361,7 +568,9 @@ object PlayerHolder {
         val job = queueScope.launch(start = CoroutineStart.LAZY) {
             try {
                 runCatching { queueWindowController.skipPrevious() }
-                    .onFailure { /* Async transport failure is contained. */ }
+                    .onFailure { error ->
+                        Log.e("V27Playback", "Notification PREVIOUS failed", error)
+                    }
             } finally {
                 synchronized(this@PlayerHolder) {
                     if (mediaSessionSkipPreviousJob === this.coroutineContext[kotlinx.coroutines.Job]) {

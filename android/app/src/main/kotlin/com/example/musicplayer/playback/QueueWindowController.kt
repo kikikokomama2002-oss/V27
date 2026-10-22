@@ -67,18 +67,21 @@ class QueueWindowController(private val scope: CoroutineScope) {
         /** Never trim closer than this to the currently playing item. */
         private const val TRIM_MARGIN = 40
 
-        /**
-         * Threshold, in ms, below which "previous" jumps to the previous
-         * track instead of restarting the current one. Matches the ~3s
-         * convention used by Spotify/Apple Music/most standard players.
-         */
-        private const val RESTART_THRESHOLD_MS = 3000L
         private const val PAGE_REQUEST_TIMEOUT_MS = 5_000L
     }
 
     private var player: ExoPlayer? = null
     private var pageProvider: QueuePageProvider? = null
+    @Volatile private var previousRestartThresholdMs: Long = 3000L
     @Volatile private var currentLibraryGeneration: Long = 0L
+
+    fun setPreviousRestartThresholdMs(value: Long) {
+        require(value in 0L..10_000L)
+        previousRestartThresholdMs = value
+    }
+
+    fun shouldRestartCurrentTrack(positionMs: Long): Boolean =
+        positionMs > previousRestartThresholdMs
 
     // Generation of the logical snapshot that produced the currently loaded
     // native window. -1 means the resident window is intentionally stale while
@@ -993,7 +996,7 @@ class QueueWindowController(private val scope: CoroutineScope) {
         // asynchronous branch. Direct seek-to-zero paths are transport
         // mutations too and must invalidate an in-flight queue navigation.
         markExternalTransportCommand()
-        if (p.currentPosition > RESTART_THRESHOLD_MS) {
+        if (shouldRestartCurrentTrack(p.currentPosition)) {
             p.seekTo(0)
             return@transportLock true
         }

@@ -1,3 +1,4 @@
+import '../core/playlist_store.dart';
 import '../data/db/track.dart';
 import '../data/repositories/library_repository.dart';
 
@@ -56,6 +57,11 @@ sealed class QueueSpec {
       case 'search':
         final query = _validText(raw['query'], 'query');
         return query == null ? null : SearchQueueSpec(query);
+      case 'playlist':
+        final playlistId = raw['playlistId'];
+        return playlistId is String && playlistId.isNotEmpty && playlistId.length <= 128
+            ? PlaylistQueueSpec(playlistId)
+            : null;
       case 'group':
         final fieldName = raw['field'] as String?;
         final rawName = raw['name'];
@@ -96,6 +102,7 @@ sealed class QueueSpec {
     LibraryRepository repo, {
     required String volume,
     required int mediaStoreId,
+    int? hintIndex,
   });
 }
 
@@ -116,6 +123,7 @@ class AllTracksQueueSpec extends QueueSpec {
     LibraryRepository repo, {
     required String volume,
     required int mediaStoreId,
+    int? hintIndex,
   }) => repo.allTracksPosition(volume, mediaStoreId);
 
   @override
@@ -148,6 +156,7 @@ class SearchQueueSpec extends QueueSpec {
     LibraryRepository repo, {
     required String volume,
     required int mediaStoreId,
+    int? hintIndex,
   }) => repo.searchPosition(query, volume, mediaStoreId);
 
   @override
@@ -158,6 +167,104 @@ class SearchQueueSpec extends QueueSpec {
   }) async {
     final tracks = await repo.searchPage(query, offset: offset, limit: limit);
     return tracks.map(_trackToQueueItem).toList();
+  }
+}
+
+/// A persisted playlist queue. Membership is stored as stable MediaStore
+/// identities; pages resolve in playlist order and omit tracks which no longer
+/// exist in the scanned library. Only one bounded membership chunk is resolved
+/// at a time, so playback does not materialize the full Track library.
+class PlaylistQueueSpec extends QueueSpec {
+  const PlaylistQueueSpec(this.playlistId);
+
+  final String playlistId;
+  static const int _identityChunkSize = 240;
+
+  @override
+  Map<String, dynamic> toMap() => {'kind': 'playlist', 'playlistId': playlistId};
+
+  @override
+  String get queryKey => 'playlist:$playlistId';
+
+  Future<UserPlaylist?> _playlist() => PlaylistStoreController.readById(playlistId);
+
+  Future<List<Track>> _resolveChunk(
+    LibraryRepository repo,
+    List<PlaylistTrackIdentity> identities,
+  ) {
+    return repo.tracksForMediaStoreIdentities(
+      identities
+          .map((identity) => (volume: identity.volume, id: identity.mediaStoreId))
+          .toList(growable: false),
+    );
+  }
+
+  @override
+  Future<int> resolveCount(LibraryRepository repo) async {
+    final playlist = await _playlist();
+    if (playlist == null || playlist.songs.isEmpty) return 0;
+    var count = 0;
+    for (var start = 0; start < playlist.songs.length; start += _identityChunkSize) {
+      final end = (start + _identityChunkSize).clamp(0, playlist.songs.length).toInt();
+      count += (await _resolveChunk(repo, playlist.songs.sublist(start, end))).length;
+    }
+    return count;
+  }
+
+  @override
+  Future<int?> resolvePosition(
+    LibraryRepository repo, {
+    required String volume,
+    required int mediaStoreId,
+    int? hintIndex,
+  }) async {
+    final playlist = await _playlist();
+    if (playlist == null || playlist.songs.isEmpty) return null;
+    var logicalIndex = 0;
+    var bestIndex = -1;
+    var bestDistance = 1 << 62;
+    for (var start = 0; start < playlist.songs.length; start += _identityChunkSize) {
+      final end = (start + _identityChunkSize).clamp(0, playlist.songs.length).toInt();
+      final tracks = await _resolveChunk(repo, playlist.songs.sublist(start, end));
+      for (final track in tracks) {
+        if (track.mediaStoreVolume == volume && track.mediaStoreId == mediaStoreId) {
+          if (hintIndex == null) return logicalIndex;
+          final distance = (logicalIndex - hintIndex).abs();
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = logicalIndex;
+          }
+        }
+        logicalIndex++;
+      }
+    }
+    return bestIndex < 0 ? null : bestIndex;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> resolvePage(
+    LibraryRepository repo, {
+    required int offset,
+    required int limit,
+  }) async {
+    if (offset < 0 || limit <= 0) return const <Map<String, dynamic>>[];
+    final playlist = await _playlist();
+    if (playlist == null || playlist.songs.isEmpty) return const <Map<String, dynamic>>[];
+    final result = <Map<String, dynamic>>[];
+    var logicalIndex = 0;
+    for (var start = 0; start < playlist.songs.length; start += _identityChunkSize) {
+      final end = (start + _identityChunkSize).clamp(0, playlist.songs.length).toInt();
+      final tracks = await _resolveChunk(repo, playlist.songs.sublist(start, end));
+      for (final track in tracks) {
+        if (logicalIndex >= offset && result.length < limit) {
+          result.add(_trackToQueueItem(track));
+        }
+        logicalIndex++;
+        if (result.length >= limit) break;
+      }
+      if (result.length >= limit) break;
+    }
+    return result;
   }
 }
 
@@ -182,6 +289,7 @@ class GroupQueueSpec extends QueueSpec {
     LibraryRepository repo, {
     required String volume,
     required int mediaStoreId,
+    int? hintIndex,
   }) => repo.groupPosition(field, name, volume, mediaStoreId);
 
   @override

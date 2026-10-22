@@ -30,9 +30,9 @@ class NowPlayingScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.equalizer),
             tooltip: 'Equalizer',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const EqualizerScreen()),
-            ),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const EqualizerScreen())),
           ),
           IconButton(
             icon: const Icon(Icons.lyrics_outlined),
@@ -40,99 +40,129 @@ class NowPlayingScreen extends ConsumerWidget {
             onPressed: track == null
                 ? null
                 : () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => LyricsScreen(track: track),
-                      ),
+                    MaterialPageRoute(
+                      builder: (_) => LyricsScreen(track: track),
                     ),
+                  ),
           ),
         ],
       ),
-      body: track == null
-          ? const Center(child: Text('Nothing playing'))
-          : Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  const Spacer(),
-                  AspectRatio(
-                    aspectRatio: 1,
-                    child: TrackArtwork(
-                      contentUri: track.contentUri,
-                      version: Object.hash(
-          track.derivedCacheEpoch,
-          track.mediaStoreGenerationModified ?? track.dateModified,
-          track.dateModified, track.contentUri, track.relativePath,
-          track.displayName, track.durationMs, track.title, track.artist,
-          track.album, track.folder,
-        ),
-                      artSize: 512,
-                      borderRadius: BorderRadius.circular(16),
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragEnd: (details) {
+          final velocity = details.primaryVelocity ?? 0;
+          if (velocity < -350) {
+            controller.next();
+          } else if (velocity > 350) {
+            controller.previous();
+          }
+        },
+        onVerticalDragEnd: (details) {
+          final velocity = details.primaryVelocity ?? 0;
+          if (velocity > 350) {
+            Navigator.of(context).maybePop();
+          }
+        },
+        child: track == null
+            ? const Center(child: Text('Nothing playing'))
+            : Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    const Spacer(),
+                    AspectRatio(
+                      aspectRatio: 1,
+                      child: TrackArtwork(
+                        contentUri: track.contentUri,
+                        version: Object.hash(
+                          track.derivedCacheEpoch,
+                          track.mediaStoreGenerationModified ??
+                              track.dateModified,
+                          track.dateModified,
+                          track.contentUri,
+                          track.relativePath,
+                          track.displayName,
+                          track.durationMs,
+                          track.title,
+                          track.artist,
+                          track.album,
+                          track.folder,
+                        ),
+                        artSize: 512,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 32),
-                  Text(track.title,
+                    const SizedBox(height: 32),
+                    Text(
+                      track.title,
                       style: Theme.of(context).textTheme.headlineSmall,
                       textAlign: TextAlign.center,
                       maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 4),
-                  Text(track.artist,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      track.artist,
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Theme.of(context)
-                              .textTheme
-                              .bodyLarge
-                              ?.color
-                              ?.withOpacity(0.7)),
-                      textAlign: TextAlign.center),
-                  const SizedBox(height: 24),
-                  Slider(
-                    min: 0,
-                    max: playback.duration.inMilliseconds > 0
-                        ? playback.duration.inMilliseconds.toDouble()
-                        : 1,
-                    value: playback.position.inMilliseconds
-                        .clamp(0, playback.duration.inMilliseconds).toInt()
-                        .toDouble(),
-                    onChanged: (v) =>
-                        controller.seek(Duration(milliseconds: v.toInt())),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        color: Theme.of(
+                          context,
+                        ).textTheme.bodyLarge?.color?.withValues(alpha: 0.7),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    Slider(
+                      min: 0,
+                      max: playback.duration.inMilliseconds > 0
+                          ? playback.duration.inMilliseconds.toDouble()
+                          : 1,
+                      value: playback.position.inMilliseconds
+                          .clamp(0, playback.duration.inMilliseconds)
+                          .toInt()
+                          .toDouble(),
+                      onChanged: (v) =>
+                          controller.seek(Duration(milliseconds: v.toInt())),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(_fmt(playback.position)),
+                          Text(_fmt(playback.duration)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        Text(_fmt(playback.position)),
-                        Text(_fmt(playback.duration)),
+                        IconButton(
+                          iconSize: 40,
+                          icon: const Icon(Icons.skip_previous),
+                          onPressed: controller.previous,
+                        ),
+                        IconButton(
+                          iconSize: 72,
+                          icon: Icon(
+                            playback.isPlaying
+                                ? Icons.pause_circle_filled
+                                : Icons.play_circle_filled,
+                          ),
+                          onPressed: controller.togglePlayPause,
+                        ),
+                        IconButton(
+                          iconSize: 40,
+                          icon: const Icon(Icons.skip_next),
+                          onPressed: controller.next,
+                        ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      IconButton(
-                        iconSize: 40,
-                        icon: const Icon(Icons.skip_previous),
-                        onPressed: controller.previous,
-                      ),
-                      IconButton(
-                        iconSize: 72,
-                        icon: Icon(playback.isPlaying
-                            ? Icons.pause_circle_filled
-                            : Icons.play_circle_filled),
-                        onPressed: controller.togglePlayPause,
-                      ),
-                      IconButton(
-                        iconSize: 40,
-                        icon: const Icon(Icons.skip_next),
-                        onPressed: controller.next,
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                ],
+                    const Spacer(),
+                  ],
+                ),
               ),
-            ),
+      ),
     );
   }
 }

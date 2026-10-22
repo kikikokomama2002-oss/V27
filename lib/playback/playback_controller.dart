@@ -22,8 +22,12 @@ const _pendingQueueSpecKey = 'pending_queue_spec_v1';
 const _pendingQueueContextIdKey = 'pending_queue_context_id_v1';
 const _pendingQueueAtKey = 'pending_queue_saved_at_ms_v1';
 const _savedQueueAtKey = 'active_queue_saved_at_ms_v1';
+const _savedPlaybackVolumeKey = 'saved_playback_volume_v1';
+const _savedPlaybackTrackIdKey = 'saved_playback_track_id_v1';
+const _savedPlaybackPositionKey = 'saved_playback_position_ms_v1';
 const _queueRestoreMaxAge = Duration(hours: 24);
-final _queueGenerationEpoch = 'epoch-${DateTime.now().microsecondsSinceEpoch}-${Object().hashCode}';
+final _queueGenerationEpoch =
+    'epoch-${DateTime.now().microsecondsSinceEpoch}-${Object().hashCode}';
 
 class _AsyncMutex {
   Future<void> _tail = Future<void>.value();
@@ -31,8 +35,10 @@ class _AsyncMutex {
   Future<T> protect<T>(Future<T> Function() action) async {
     final previous = _tail;
     final release = Completer<void>();
-    _tail = previous.then<void>((_) => release.future,
-        onError: (Object _, StackTrace __) => release.future);
+    _tail = previous.then<void>(
+      (_) => release.future,
+      onError: (Object _, StackTrace __) => release.future,
+    );
     try {
       try {
         await previous;
@@ -70,27 +76,64 @@ class _AsyncMutex {
 /// list itself.
 class PlaybackController extends StateNotifier<PlaybackState> {
   PlaybackController(this._ref) : super(const PlaybackState()) {
-    _sub = PlayerChannel.instance.stateStream.listen((s) => state = s);
+    _sub = PlayerChannel.instance.stateStream.listen(_onPlaybackStateChanged);
     PlayerChannel.instance.setNativeCallHandler(_handleNativeCall);
     // libraryRepositoryProvider depends on isarProvider's async open, so
     // it may still be null at construction time — watch for it to
     // become available rather than reading it once, same reasoning as
     // the paging notifiers in core/providers.dart.
-    _ref.listen<LibraryRepository?>(
-      libraryRepositoryProvider,
-      (previous, next) {
-        if (next == null || previous != null) return;
-        _deletionsSub = next.tracksDeleted.listen(_onTracksDeleted);
-        _changesSub = next.tracksChanged.listen((_) => _onTracksChanged());
-        _queueInvalidationsSub =
-            next.queueInvalidations.listen((_) => _onTracksChanged());
-        unawaited(_restoreQueueContext());
-      },
-      fireImmediately: true,
-    );
+    _ref.listen<LibraryRepository?>(libraryRepositoryProvider, (
+      previous,
+      next,
+    ) {
+      if (next == null || previous != null) return;
+      _deletionsSub = next.tracksDeleted.listen(_onTracksDeleted);
+      _changesSub = next.tracksChanged.listen((_) => _onTracksChanged());
+      _queueInvalidationsSub = next.queueInvalidations.listen(
+        (_) => _onTracksChanged(),
+      );
+      unawaited(_restoreQueueContext());
+    }, fireImmediately: true);
   }
 
   final Ref _ref;
+  String? _lastSavedPlaybackIdentity;
+  int _lastPlaybackSaveAtMs = 0;
+
+  void _onPlaybackStateChanged(PlaybackState playbackState) {
+    state = playbackState;
+    unawaited(_persistPlaybackPosition(playbackState));
+  }
+
+  Future<void> _persistPlaybackPosition(PlaybackState playbackState) async {
+    final volume = playbackState.currentTrackVolume;
+    final trackId = playbackState.currentTrackId;
+    if (volume == null || volume.isEmpty || trackId == null || trackId <= 0) {
+      return;
+    }
+
+    final identity = '$volume:$trackId';
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final trackChanged = identity != _lastSavedPlaybackIdentity;
+    if (!trackChanged && now - _lastPlaybackSaveAtMs < 1000) return;
+
+    // Throttle persistence to avoid writing SharedPreferences every event tick.
+    _lastSavedPlaybackIdentity = identity;
+    _lastPlaybackSaveAtMs = now;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_savedPlaybackVolumeKey, volume);
+      await prefs.setInt(_savedPlaybackTrackIdKey, trackId);
+      await prefs.setInt(
+        _savedPlaybackPositionKey,
+        playbackState.position.inMilliseconds.clamp(0, 1 << 62),
+      );
+    } catch (_) {
+      // Playback must continue even if position persistence fails.
+    }
+  }
+
   late final StreamSubscription<PlaybackState> _sub;
   StreamSubscription<List<String>>? _deletionsSub;
   StreamSubscription<void>? _changesSub;
@@ -174,7 +217,8 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     for (var attempt = 0; attempt < 3; attempt++) {
       snapshotGeneration = await repo.waitForStableSnapshot();
       if (!_queueGenerationGate.isCurrent(requestGeneration)) return;
-      if (snapshotGeneration != repo.libraryGeneration || repo.scanInProgress) continue;
+      if (snapshotGeneration != repo.libraryGeneration || repo.scanInProgress)
+        continue;
       totalCount = await spec.resolveCount(repo);
       if (!_queueGenerationGate.isCurrent(requestGeneration)) return;
       if (totalCount == 0) return;
@@ -182,14 +226,17 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         repo,
         volume: startVolume,
         mediaStoreId: startMediaStoreId,
+        hintIndex: startIndex,
       );
       if (!_queueGenerationGate.isCurrent(requestGeneration)) return;
       if (resolvedPosition == null) return;
       clampedStart = resolvedPosition.clamp(0, totalCount - 1).toInt();
-      windowStart =
-          (clampedStart - _initialWindowBefore).clamp(0, totalCount - 1).toInt();
-      final windowEnd =
-          (clampedStart + _initialWindowAfter + 1).clamp(0, totalCount).toInt();
+      windowStart = (clampedStart - _initialWindowBefore)
+          .clamp(0, totalCount - 1)
+          .toInt();
+      final windowEnd = (clampedStart + _initialWindowAfter + 1)
+          .clamp(0, totalCount)
+          .toInt();
       final candidate = await spec.resolvePage(
         repo,
         offset: windowStart,
@@ -229,9 +276,9 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     _contextCounter++;
     final contextId = 'q$_contextCounter';
     final installLibraryGeneration = repo.libraryGeneration;
-      if (installLibraryGeneration != repo.libraryGeneration) {
-        throw StateError('Library changed before queue installation');
-      }
+    if (installLibraryGeneration != repo.libraryGeneration) {
+      throw StateError('Library changed before queue installation');
+    }
 
     if (!_queueGenerationGate.isCurrent(requestGeneration)) return;
 
@@ -243,7 +290,10 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       if (!_queueGenerationGate.isCurrent(requestGeneration)) return false;
       await prefs.setString(_pendingQueueSpecKey, jsonEncode(spec.toMap()));
       await prefs.setString(_pendingQueueContextIdKey, contextId);
-      await prefs.setInt(_pendingQueueAtKey, DateTime.now().millisecondsSinceEpoch);
+      await prefs.setInt(
+        _pendingQueueAtKey,
+        DateTime.now().millisecondsSinceEpoch,
+      );
       return _queueGenerationGate.isCurrent(requestGeneration);
     });
     if (!pendingWritten) return;
@@ -260,10 +310,12 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         _activeContextId = contextId;
         try {
           if (installLibraryGeneration != repo.libraryGeneration) {
-        throw StateError('Library changed before native queue installation');
-      }
+            throw StateError(
+              'Library changed before native queue installation',
+            );
+          }
 
-      await PlayerChannel.instance.setQueueContext(
+          await PlayerChannel.instance.setQueueContext(
             contextId: contextId,
             queueGeneration: requestGeneration,
             queueGenerationEpoch: _queueGenerationEpoch,
@@ -312,7 +364,10 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       if (!_queueGenerationGate.isCurrent(requestGeneration)) return;
       await prefs.setString(_savedQueueContextIdKey, contextId);
       if (!_queueGenerationGate.isCurrent(requestGeneration)) return;
-      await prefs.setInt(_savedQueueAtKey, DateTime.now().millisecondsSinceEpoch);
+      await prefs.setInt(
+        _savedQueueAtKey,
+        DateTime.now().millisecondsSinceEpoch,
+      );
       if (prefs.getString(_pendingQueueContextIdKey) == contextId) {
         await prefs.remove(_pendingQueueSpecKey);
         await prefs.remove(_pendingQueueContextIdKey);
@@ -329,9 +384,10 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final savedAt = prefs.getInt(_savedQueueAtKey);
     final pendingAt = prefs.getInt(_pendingQueueAtKey);
-    final savedExpired = savedAt != null &&
-        nowMs - savedAt > _queueRestoreMaxAge.inMilliseconds;
-    final pendingExpired = pendingAt != null &&
+    final savedExpired =
+        savedAt != null && nowMs - savedAt > _queueRestoreMaxAge.inMilliseconds;
+    final pendingExpired =
+        pendingAt != null &&
         nowMs - pendingAt > _queueRestoreMaxAge.inMilliseconds;
 
     final nativeContextId = await PlayerChannel.instance.getQueueContextId();
@@ -383,7 +439,10 @@ class PlaybackController extends StateNotifier<PlaybackState> {
           if (!_queueGenerationGate.isCurrent(restoreGeneration)) return false;
           await prefs.setString(_savedQueueContextIdKey, nativeContextId);
           if (!_queueGenerationGate.isCurrent(restoreGeneration)) return false;
-          await prefs.setInt(_savedQueueAtKey, DateTime.now().millisecondsSinceEpoch);
+          await prefs.setInt(
+            _savedQueueAtKey,
+            DateTime.now().millisecondsSinceEpoch,
+          );
           if (!_queueGenerationGate.isCurrent(restoreGeneration)) return false;
           await prefs.remove(_pendingQueueSpecKey);
           if (!_queueGenerationGate.isCurrent(restoreGeneration)) return false;
@@ -402,7 +461,9 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         // exhausted. Fail closed by clearing that native context instead of
         // leaving a live-but-unrecoverable queue behind.
         try {
-          await PlayerChannel.instance.clearQueueContextIfMatches(nativeContextId);
+          await PlayerChannel.instance.clearQueueContextIfMatches(
+            nativeContextId,
+          );
         } catch (_) {
           // Best effort; the in-memory Dart descriptor is still absent, so a
           // later restore attempt will re-check the native context.
@@ -440,7 +501,9 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         // a live queue that Dart can never refill. Fail closed exactly as we
         // do for a missing descriptor.
         try {
-          await PlayerChannel.instance.clearQueueContextIfMatches(nativeContextId);
+          await PlayerChannel.instance.clearQueueContextIfMatches(
+            nativeContextId,
+          );
         } catch (_) {}
         await _queuePrefsMutex.protect<void>(() async {
           if (!_queueGenerationGate.isCurrent(restoreGeneration)) return;
@@ -457,7 +520,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       }
       if (!_queueGenerationGate.isCurrent(restoreGeneration)) return;
 
-        try {
+      try {
         // Publish before scan/refresh so the native delayed rebase can safely
         // obtain a page from the restored logical queue.
         _activeSpec = spec;
@@ -478,7 +541,8 @@ class PlaybackController extends StateNotifier<PlaybackState> {
           nativeContextId.startsWith('q') ? nativeContextId.substring(1) : '',
         );
         if (!_queueGenerationGate.isCurrent(restoreGeneration)) return;
-        if (suffix != null && suffix > _contextCounter) _contextCounter = suffix;
+        if (suffix != null && suffix > _contextCounter)
+          _contextCounter = suffix;
       } catch (_) {
         // The native queue survived, so its logical recovery descriptor is
         // still valid even when reconciliation fails transiently. Keep both
@@ -507,11 +571,13 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       final restoreLibraryGeneration = await repo.waitForStableSnapshot();
       if (!_queueGenerationGate.isCurrent(restoreGeneration) ||
           restoreLibraryGeneration != repo.libraryGeneration ||
-          repo.scanInProgress) return;
+          repo.scanInProgress)
+        return;
       final totalCount = await spec.resolveCount(repo);
       if (!_queueGenerationGate.isCurrent(restoreGeneration) ||
           restoreLibraryGeneration != repo.libraryGeneration ||
-          repo.scanInProgress) return;
+          repo.scanInProgress)
+        return;
       if (totalCount <= 0) {
         await _queuePrefsMutex.protect<void>(() async {
           if (!_queueGenerationGate.isCurrent(restoreGeneration)) return;
@@ -523,15 +589,53 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         });
         return;
       }
-      final limit = totalCount.clamp(1, _initialWindowAfter + 1).toInt();
-      final window = await spec.resolvePage(repo, offset: 0, limit: limit);
+      // Recover the last known track and position within this logical queue.
+      // If the saved track no longer belongs to the queue, fall back to its start.
+      final savedVolume = prefs.getString(_savedPlaybackVolumeKey);
+      final savedTrackId = prefs.getInt(_savedPlaybackTrackIdKey);
+      final savedPositionMs = (prefs.getInt(_savedPlaybackPositionKey) ?? 0)
+          .clamp(0, 1 << 62);
+
+      var restoreIndex = 0;
+      var startPositionMs = 0;
+      if (savedVolume != null && savedTrackId != null) {
+        final savedIndex = await spec.resolvePosition(
+          repo,
+          volume: savedVolume,
+          mediaStoreId: savedTrackId,
+        );
+        if (!_queueGenerationGate.isCurrent(restoreGeneration) ||
+            restoreLibraryGeneration != repo.libraryGeneration ||
+            repo.scanInProgress)
+          return;
+        if (savedIndex != null && savedIndex >= 0 && savedIndex < totalCount) {
+          restoreIndex = savedIndex;
+          startPositionMs = savedPositionMs;
+        }
+      }
+
+      final windowStart = (restoreIndex - _initialWindowBefore).clamp(
+        0,
+        totalCount - 1,
+      );
+      final windowEnd = (restoreIndex + _initialWindowAfter + 1).clamp(
+        0,
+        totalCount,
+      );
+      final window = await spec.resolvePage(
+        repo,
+        offset: windowStart,
+        limit: windowEnd - windowStart,
+      );
       if (!_queueGenerationGate.isCurrent(restoreGeneration) ||
           restoreLibraryGeneration != repo.libraryGeneration ||
-          repo.scanInProgress) return;
-      if (window.isEmpty) return;
-      final first = window.first;
-      final startVolume = first['volume'] as String?;
-      final startId = (first['id'] as num?)?.toInt();
+          repo.scanInProgress)
+        return;
+      final targetOffset = restoreIndex - windowStart;
+      if (targetOffset < 0 || targetOffset >= window.length) return;
+      final target = window[targetOffset];
+      final startVolume = target['volume'] as String?;
+      final startId = (target['id'] as num?)?.toInt();
       if (startVolume == null || startId == null) return;
 
       _contextCounter++;
@@ -544,10 +648,11 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         libraryGeneration: restoreLibraryGeneration,
         spec: spec.toMap(),
         totalCount: totalCount,
-        startIndex: 0,
+        startIndex: restoreIndex,
         initialWindow: window,
-        windowStartIndex: 0,
+        windowStartIndex: windowStart,
         startItemIdentity: '$startVolume:$startId',
+        startPositionMs: startPositionMs,
         // Restoring a persisted queue must not start playback on app launch.
         autoPlay: false,
       );
@@ -560,7 +665,10 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         if (!_queueGenerationGate.isCurrent(restoreGeneration)) return false;
         await prefs.setString(_savedQueueContextIdKey, newContextId);
         if (!_queueGenerationGate.isCurrent(restoreGeneration)) return false;
-        await prefs.setInt(_savedQueueAtKey, DateTime.now().millisecondsSinceEpoch);
+        await prefs.setInt(
+          _savedQueueAtKey,
+          DateTime.now().millisecondsSinceEpoch,
+        );
         if (!_queueGenerationGate.isCurrent(restoreGeneration)) return false;
         await prefs.remove(_pendingQueueSpecKey);
         if (!_queueGenerationGate.isCurrent(restoreGeneration)) return false;
@@ -631,11 +739,13 @@ class PlaybackController extends StateNotifier<PlaybackState> {
           // turn a partial event into a falsely-targeted event and lose the
           // recovery path. Any malformed payload is therefore escalated to
           // an explicit unknown event.
-          final identitiesValid = rawIdentities is List &&
+          final identitiesValid =
+              rawIdentities is List &&
               rawIdentities.every((entry) {
                 if (entry is! String) return false;
                 final separator = entry.indexOf(':');
-                if (separator <= 0 || separator >= entry.length - 1) return false;
+                if (separator <= 0 || separator >= entry.length - 1)
+                  return false;
                 final volume = entry.substring(0, separator).trim();
                 final id = int.tryParse(entry.substring(separator + 1));
                 return volume.isNotEmpty && id != null && id > 0;
@@ -657,18 +767,31 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         final limit = (args['limit'] as num?)?.toInt() ?? 0;
         final requestId = (args['requestId'] as num?)?.toInt();
         if (offset < 0 || limit <= 0 || limit > 240) {
-          return {'items': const <Map<String, dynamic>>[], 'totalCount': 0, 'startIndex': offset, 'libraryGeneration': _repo?.libraryGeneration ?? 0};
+          return {
+            'items': const <Map<String, dynamic>>[],
+            'totalCount': 0,
+            'startIndex': offset,
+            'libraryGeneration': _repo?.libraryGeneration ?? 0,
+          };
         }
 
         // A response for a queue that's since been replaced — the
         // native side already discards these by contextId too, but
         // avoid doing a wasted DB query for it here as well.
         if (contextId != _activeContextId || _activeSpec == null) {
-          return {'items': const <Map<String, dynamic>>[], 'totalCount': 0, 'libraryGeneration': _repo?.libraryGeneration ?? 0};
+          return {
+            'items': const <Map<String, dynamic>>[],
+            'totalCount': 0,
+            'libraryGeneration': _repo?.libraryGeneration ?? 0,
+          };
         }
         final repo = _repo;
         if (repo == null) {
-          return {'items': const <Map<String, dynamic>>[], 'totalCount': 0, 'libraryGeneration': _repo?.libraryGeneration ?? 0};
+          return {
+            'items': const <Map<String, dynamic>>[],
+            'totalCount': 0,
+            'libraryGeneration': _repo?.libraryGeneration ?? 0,
+          };
         }
 
         if (requestId != null) _pendingRequestIds.add(requestId);
@@ -683,29 +806,55 @@ class PlaybackController extends StateNotifier<PlaybackState> {
           for (var attempt = 0; attempt < 2; attempt++) {
             await repo.waitForStableSnapshot();
             if (requestId != null && _cancelledRequestIds.contains(requestId)) {
-              return {'items': const <Map<String, dynamic>>[], 'totalCount': 0, 'libraryGeneration': repo.libraryGeneration};
+              return {
+                'items': const <Map<String, dynamic>>[],
+                'totalCount': 0,
+                'libraryGeneration': repo.libraryGeneration,
+              };
             }
             final requestLibraryGeneration = repo.libraryGeneration;
-            final page =
-                await spec.resolvePage(repo, offset: offset, limit: limit);
+            final page = await spec.resolvePage(
+              repo,
+              offset: offset,
+              limit: limit,
+            );
 
             if (requestId != null && _cancelledRequestIds.contains(requestId)) {
-              return {'items': const <Map<String, dynamic>>[], 'totalCount': 0, 'libraryGeneration': _repo?.libraryGeneration ?? 0};
+              return {
+                'items': const <Map<String, dynamic>>[],
+                'totalCount': 0,
+                'libraryGeneration': _repo?.libraryGeneration ?? 0,
+              };
             }
 
             final totalCount = await spec.resolveCount(repo);
-            if (repo.scanInProgress || requestLibraryGeneration != repo.libraryGeneration) continue;
+            if (repo.scanInProgress ||
+                requestLibraryGeneration != repo.libraryGeneration)
+              continue;
             if (totalCount < offset) {
               if (attempt == 1) {
-                return {'items': const <Map<String, dynamic>>[], 'totalCount': totalCount, 'startIndex': offset, 'libraryGeneration': _repo?.libraryGeneration ?? 0};
+                return {
+                  'items': const <Map<String, dynamic>>[],
+                  'totalCount': totalCount,
+                  'startIndex': offset,
+                  'libraryGeneration': _repo?.libraryGeneration ?? 0,
+                };
               }
               continue;
             }
 
-            final verification =
-                await spec.resolvePage(repo, offset: offset, limit: limit);
+            final verification = await spec.resolvePage(
+              repo,
+              offset: offset,
+              limit: limit,
+            );
             if (requestId != null && _cancelledRequestIds.contains(requestId)) {
-              return {'items': const <Map<String, dynamic>>[], 'totalCount': totalCount, 'startIndex': offset, 'libraryGeneration': _repo?.libraryGeneration ?? 0};
+              return {
+                'items': const <Map<String, dynamic>>[],
+                'totalCount': totalCount,
+                'startIndex': offset,
+                'libraryGeneration': _repo?.libraryGeneration ?? 0,
+              };
             }
 
             bool sameIdentitySpan(
@@ -756,8 +905,12 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         final contextId = args['contextId'] as String?;
         final volume = args['volume'] as String?;
         final mediaStoreId = (args['id'] as num?)?.toInt();
-        final before = ((args['before'] as num?)?.toInt() ?? 20).clamp(0, 80).toInt();
-        final after = ((args['after'] as num?)?.toInt() ?? 120).clamp(1, 160).toInt();
+        final before = ((args['before'] as num?)?.toInt() ?? 20)
+            .clamp(0, 80)
+            .toInt();
+        final after = ((args['after'] as num?)?.toInt() ?? 120)
+            .clamp(1, 160)
+            .toInt();
         final requestId = (args['requestId'] as num?)?.toInt();
         if (contextId != _activeContextId ||
             _activeSpec == null ||
@@ -773,7 +926,12 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         }
         final repo = _repo;
         if (repo == null) {
-          return {'items': const <Map<String, dynamic>>[], 'totalCount': 0, 'startIndex': 0, 'libraryGeneration': _repo?.libraryGeneration ?? 0};
+          return {
+            'items': const <Map<String, dynamic>>[],
+            'totalCount': 0,
+            'startIndex': 0,
+            'libraryGeneration': _repo?.libraryGeneration ?? 0,
+          };
         }
         if (requestId != null) _pendingRequestIds.add(requestId);
         try {
@@ -787,7 +945,9 @@ class PlaybackController extends StateNotifier<PlaybackState> {
           // re-resolution instead of a stale queue window.
           for (var attempt = 0; attempt < 3; attempt++) {
             final requestLibraryGeneration = await repo.waitForStableSnapshot();
-            if (repo.scanInProgress || requestLibraryGeneration != repo.libraryGeneration) continue;
+            if (repo.scanInProgress ||
+                requestLibraryGeneration != repo.libraryGeneration)
+              continue;
             final position = await spec.resolvePosition(
               repo,
               volume: volume,
@@ -806,12 +966,19 @@ class PlaybackController extends StateNotifier<PlaybackState> {
               };
             }
             if (requestId != null && _cancelledRequestIds.contains(requestId)) {
-              return {'items': const <Map<String, dynamic>>[], 'totalCount': 0, 'startIndex': position, 'libraryGeneration': _repo?.libraryGeneration ?? 0};
+              return {
+                'items': const <Map<String, dynamic>>[],
+                'totalCount': 0,
+                'startIndex': position,
+                'libraryGeneration': _repo?.libraryGeneration ?? 0,
+              };
             }
 
             final totalCount = await spec.resolveCount(repo);
             if (totalCount <= 0 || position >= totalCount) {
-              if (totalCount == 0 && !repo.scanInProgress && requestLibraryGeneration == repo.libraryGeneration) {
+              if (totalCount == 0 &&
+                  !repo.scanInProgress &&
+                  requestLibraryGeneration == repo.libraryGeneration) {
                 return {
                   'items': const <Map<String, dynamic>>[],
                   'totalCount': 0,
@@ -833,14 +1000,27 @@ class PlaybackController extends StateNotifier<PlaybackState> {
 
             final start = (position - before).clamp(0, totalCount - 1).toInt();
             final limit = (before + after + 1).clamp(1, 240).toInt();
-            final page = await spec.resolvePage(repo, offset: start, limit: limit);
-            if (repo.scanInProgress || requestLibraryGeneration != repo.libraryGeneration) continue;
+            final page = await spec.resolvePage(
+              repo,
+              offset: start,
+              limit: limit,
+            );
+            if (repo.scanInProgress ||
+                requestLibraryGeneration != repo.libraryGeneration)
+              continue;
             if (requestId != null && _cancelledRequestIds.contains(requestId)) {
-              return {'items': const <Map<String, dynamic>>[], 'totalCount': totalCount, 'startIndex': start, 'libraryGeneration': _repo?.libraryGeneration ?? 0};
+              return {
+                'items': const <Map<String, dynamic>>[],
+                'totalCount': totalCount,
+                'startIndex': start,
+                'libraryGeneration': _repo?.libraryGeneration ?? 0,
+              };
             }
 
             final relative = position - start;
-            final item = relative >= 0 && relative < page.length ? page[relative] : null;
+            final item = relative >= 0 && relative < page.length
+                ? page[relative]
+                : null;
             final itemIdentity = item == null
                 ? null
                 : '${item['volume'] as String?}:${(item['id'] as num?)?.toInt()}';
@@ -920,14 +1100,16 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     // Same best-effort boundary as deletion pruning: the observer callback is
     // not an await point, but the Future still needs an explicit error sink.
     unawaited(
-      PlayerChannel.instance.refreshQueueAfterLibraryChange().catchError((_) {}),
+      PlayerChannel.instance.refreshQueueAfterLibraryChange().catchError(
+        (_) {},
+      ),
     );
   }
 
-  Future<void> togglePlayPause() =>
-      PlayerChannel.instance.togglePlayPause();
+  Future<void> togglePlayPause() => PlayerChannel.instance.togglePlayPause();
 
-  Future<void> seek(Duration position) => PlayerChannel.instance.seekTo(position);
+  Future<void> seek(Duration position) =>
+      PlayerChannel.instance.seekTo(position);
   Future<void> next() => PlayerChannel.instance.skipNext();
   Future<void> previous() => PlayerChannel.instance.skipPrevious();
 

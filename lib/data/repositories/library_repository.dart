@@ -1996,6 +1996,40 @@ class LibraryRepository {
   Stream<void> watchTracksChanged() => _tracksChangedController.stream;
   Stream<void> watchQueueInvalidations() => _queueInvalidationController.stream;
 
+  /// Resolves a bounded batch of stable MediaStore identities in the caller's
+  /// order. The ID index limits the query to candidates instead of scanning the
+  /// whole library; the volume is then checked explicitly because MediaStore
+  /// IDs may collide across primary/removable storage. Missing/deleted tracks
+  /// are omitted, which lets playlist queue pages skip stale membership safely.
+  Future<List<Track>> tracksForMediaStoreIdentities(
+    List<({String volume, int id})> identities,
+  ) async {
+    if (identities.isEmpty) return const <Track>[];
+    if (identities.length > 500) {
+      throw ArgumentError.value(identities.length, 'identities', 'maximum is 500');
+    }
+    final valid = identities
+        .where((item) => item.volume.trim().isNotEmpty && item.volume.length <= maxVolumeLength && item.id > 0)
+        .toList(growable: false);
+    if (valid.isEmpty) return const <Track>[];
+
+    final ids = valid.map((item) => item.id).toSet().toList(growable: false);
+    final candidates = await _isar.tracks
+        .filter()
+        .anyOf(ids, (query, id) => query.mediaStoreIdEqualTo(id))
+        .findAll();
+    final byIdentity = <String, Track>{
+      for (final track in candidates)
+        '${track.mediaStoreVolume}:${track.mediaStoreId}': track,
+    };
+    final result = <Track>[];
+    for (final identity in valid) {
+      final track = byIdentity['${identity.volume.trim()}:${identity.id}'];
+      if (track != null) result.add(track);
+    }
+    return result;
+  }
+
   /// Indexed point lookup for the currently-playing MediaStore identity.
   /// The volume is part of the identity because MediaStore IDs are only
   /// unique inside a volume.

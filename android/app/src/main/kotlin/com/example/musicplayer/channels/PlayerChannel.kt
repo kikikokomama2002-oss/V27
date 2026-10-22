@@ -963,6 +963,166 @@ class PlayerChannel(
                 }
             }
 
+            "setPlaybackSpeed" -> {
+                try {
+                    val speed = call.argument<Number>("speed")?.toFloat()
+                        ?: throw IllegalArgumentException("speed is required")
+                    require(speed.isFinite() && speed in 0.5f..2.0f) {
+                        "speed must be between 0.5 and 2.0"
+                    }
+                    PlayerHolder.setPlaybackSpeed(context, speed)
+                    result.success(null)
+                } catch (e: Exception) {
+                    result.error("SET_PLAYBACK_SPEED_FAILED", e.message, null)
+                }
+            }
+
+            "getLockScreenControlsEnabled" -> {
+                try {
+                    result.success(PlayerHolder.isLockScreenControlsEnabled(context))
+                } catch (e: Exception) {
+                    result.error("GET_LOCK_SCREEN_CONTROLS_FAILED", e.message, null)
+                }
+            }
+
+            "setLockScreenControlsEnabled" -> {
+                try {
+                    val enabled = call.argument<Boolean>("enabled")
+                        ?: throw IllegalArgumentException("enabled is required")
+                    PlayerHolder.setLockScreenControlsEnabled(context, enabled)
+                    result.success(null)
+                } catch (e: Exception) {
+                    result.error("SET_LOCK_SCREEN_CONTROLS_FAILED", e.message, null)
+                }
+            }
+
+            "getExternalDeviceStartEnabled" -> {
+                try {
+                    result.success(PlayerHolder.isExternalDeviceStartEnabled(context))
+                } catch (e: Exception) {
+                    result.error("GET_EXTERNAL_DEVICE_START_FAILED", e.message, null)
+                }
+            }
+
+            "setExternalDeviceStartEnabled" -> {
+                try {
+                    val enabled = call.argument<Boolean>("enabled")
+                        ?: throw IllegalArgumentException("enabled is required")
+                    PlayerHolder.setExternalDeviceStartEnabled(context, enabled)
+                    result.success(null)
+                } catch (e: Exception) {
+                    result.error("SET_EXTERNAL_DEVICE_START_FAILED", e.message, null)
+                }
+            }
+
+            "getRepeatCurrentTrackEnabled" -> {
+                try {
+                    result.success(PlayerHolder.isRepeatCurrentTrackEnabled(context))
+                } catch (e: Exception) {
+                    result.error("GET_REPEAT_CURRENT_FAILED", e.message, null)
+                }
+            }
+
+            "setRepeatCurrentTrackEnabled" -> {
+                try {
+                    val enabled = call.argument<Boolean>("enabled")
+                        ?: throw IllegalArgumentException("enabled is required")
+                    PlayerHolder.setRepeatCurrentTrackEnabled(context, enabled)
+                    result.success(null)
+                } catch (e: Exception) {
+                    result.error("SET_REPEAT_CURRENT_FAILED", e.message, null)
+                }
+            }
+
+            "getPreviousRestartThresholdSeconds" -> {
+                try {
+                    result.success(PlayerHolder.getPreviousRestartThresholdSeconds(context))
+                } catch (e: Exception) {
+                    result.error("GET_PREVIOUS_THRESHOLD_FAILED", e.message, null)
+                }
+            }
+
+            "setPreviousRestartThresholdSeconds" -> {
+                try {
+                    val seconds = call.argument<Number>("seconds")?.toInt()
+                        ?: throw IllegalArgumentException("seconds is required")
+                    PlayerHolder.setPreviousRestartThresholdSeconds(context, seconds)
+                    result.success(null)
+                } catch (e: Exception) {
+                    result.error("SET_PREVIOUS_THRESHOLD_FAILED", e.message, null)
+                }
+            }
+
+            "openContactComposer" -> {
+                try {
+                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_SUBJECT, "Feedback about V27")
+                        putExtra(
+                            Intent.EXTRA_TEXT,
+                            "Feedback about V27 Offline Music Player:\n\n",
+                        )
+                    }
+                    context.startActivity(
+                        Intent.createChooser(sendIntent, "Send feedback about V27")
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                    result.success(null)
+                } catch (e: Exception) {
+                    result.error("OPEN_FEEDBACK_FAILED", e.message, null)
+                }
+            }
+
+            "getSkipSilenceEnabled" -> {
+                try {
+                    result.success(PlayerHolder.isSkipSilenceEnabled(context))
+                } catch (e: Exception) {
+                    result.error("GET_SKIP_SILENCE_FAILED", e.message, null)
+                }
+            }
+
+            "setSkipSilenceEnabled" -> {
+                try {
+                    val enabled = call.argument<Boolean>("enabled")
+                        ?: throw IllegalArgumentException("enabled is required")
+                    PlayerHolder.setSkipSilenceEnabled(context, enabled)
+                    result.success(null)
+                } catch (e: Exception) {
+                    result.error("SET_SKIP_SILENCE_FAILED", e.message, null)
+                }
+            }
+
+            "getSleepTimerDeadline" -> {
+                try {
+                    result.success(PlayerHolder.getSleepTimerDeadline(context))
+                } catch (e: Exception) {
+                    result.error("GET_SLEEP_TIMER_FAILED", e.message, null)
+                }
+            }
+
+            "setSleepTimerDeadline" -> {
+                try {
+                    val deadlineMs = call.argument<Number>("deadlineMs")?.toLong()
+                        ?: throw IllegalArgumentException("deadlineMs is required")
+                    require(deadlineMs > System.currentTimeMillis()) {
+                        "sleep timer deadline must be in the future"
+                    }
+                    PlayerHolder.setSleepTimerDeadline(context, deadlineMs)
+                    result.success(null)
+                } catch (e: Exception) {
+                    result.error("SET_SLEEP_TIMER_FAILED", e.message, null)
+                }
+            }
+
+            "cancelSleepTimer" -> {
+                try {
+                    PlayerHolder.setSleepTimerDeadline(context, null)
+                    result.success(null)
+                } catch (e: Exception) {
+                    result.error("CANCEL_SLEEP_TIMER_FAILED", e.message, null)
+                }
+            }
+
             "play" -> {
                 try {
                     // PlaybackService may have been stopped while the shared
