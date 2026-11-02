@@ -2,9 +2,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
-import '../../core/library_tab_settings.dart';
 import '../../core/playlist_store.dart';
 import '../../core/debouncer.dart';
+import '../../core/library_tab_settings.dart';
+
 import '../../core/widgets/track_artwork.dart';
 import '../../data/db/track.dart';
 import '../../data/repositories/library_repository.dart';
@@ -25,53 +26,17 @@ class LibraryScreen extends ConsumerStatefulWidget {
 class _LibraryScreenState extends ConsumerState<LibraryScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  late List<LibraryTab> _visibleTabs;
+  final List<LibraryTab> _visibleTabs = List<LibraryTab>.unmodifiable(LibraryTab.values);
   late final Debouncer _searchDebounce;
   late final FocusNode _searchFocusNode;
-  ProviderSubscription<LibraryTabConfig>? _tabConfigSubscription;
 
   @override
   void initState() {
     super.initState();
     _searchFocusNode = FocusNode();
-    _visibleTabs = ref.read(libraryTabSettingsProvider).visibleTabs;
     _tabController = TabController(length: _visibleTabs.length, vsync: this)
       ..addListener(_handleTabChange);
-    _tabConfigSubscription = ref.listenManual<LibraryTabConfig>(
-      libraryTabSettingsProvider,
-      (_, next) => _applyTabConfig(next),
-    );
     _searchDebounce = Debouncer(const Duration(milliseconds: 250));
-  }
-
-  void _applyTabConfig(LibraryTabConfig config) {
-    final nextTabs = config.visibleTabs;
-    if (nextTabs.length == _visibleTabs.length &&
-        nextTabs.asMap().entries.every((entry) => entry.value == _visibleTabs[entry.key])) {
-      return;
-    }
-
-    final oldIndex = _tabController.index;
-    final oldTab = _visibleTabs[oldIndex.clamp(0, _visibleTabs.length - 1).toInt()];
-    final matchingIndex = nextTabs.indexOf(oldTab);
-    final nextIndex = matchingIndex >= 0
-        ? matchingIndex
-        : oldIndex.clamp(0, nextTabs.length - 1).toInt();
-
-    _tabController
-      ..removeListener(_handleTabChange)
-      ..dispose();
-    _visibleTabs = nextTabs;
-    _tabController = TabController(
-      length: _visibleTabs.length,
-      vsync: this,
-      initialIndex: nextIndex,
-    )..addListener(_handleTabChange);
-
-    if (_visibleTabs[_tabController.index] != LibraryTab.tracks) {
-      _searchFocusNode.unfocus();
-    }
-    if (mounted) setState(() {});
   }
 
   void _handleTabChange() {
@@ -102,7 +67,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   void dispose() {
     _searchDebounce.dispose();
     _searchFocusNode.dispose();
-    _tabConfigSubscription?.close();
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     super.dispose();
@@ -131,7 +95,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: _visibleTabs.length > 3,
+          isScrollable: false,
           tabs: _visibleTabs
               .map((tab) => Tab(text: tab.label))
               .toList(growable: false),
@@ -141,7 +105,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
         children: [
           if (_visibleTabs[_tabController.index] == LibraryTab.tracks)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
               child: TextField(
                 focusNode: _searchFocusNode,
                 textInputAction: TextInputAction.search,

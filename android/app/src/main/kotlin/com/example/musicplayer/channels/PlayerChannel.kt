@@ -61,6 +61,7 @@ const val PLAYER_CHANNEL_NAME = "com.example.musicplayer/player"
 class PlayerChannel(
     private val context: Context,
     private val channel: MethodChannel,
+    private val isHeadless: Boolean = false,
     private val launchLyricsFolderPicker: (MethodChannel.Result) -> Unit
 ) : MethodChannel.MethodCallHandler {
 
@@ -523,10 +524,11 @@ class PlayerChannel(
         val orphaned = pendingResults.toList()
         pendingResults.clear()
         orphaned.forEach { it.cancelForDispose() }
-        // Flutter engine generations are local to one engine lifetime. The native player may
-        // survive engine recreation, so invalidate the old generation namespace before the
-        // next engine publishes its first library generation.
-        PlayerHolder.clearLibraryGeneration()
+        // A surviving headless engine still owns the queue's library generation.
+        // Only clear the generation when no headless queue provider remains attached.
+        if (!isHeadless) {
+            PlayerHolder.clearLibraryGenerationIfNoHeadlessQueueProvider()
+        }
     }
 
     private fun startService() {
@@ -956,7 +958,9 @@ class PlayerChannel(
 
             "getQueueContextId" -> {
                 try {
-                    PlayerHolder.reattachQueueProvider(channel)
+                    if (!isHeadless) {
+                        PlayerHolder.reattachQueueProvider(channel)
+                    }
                     result.success(PlayerHolder.currentQueueContextId())
                 } catch (e: Exception) {
                     result.error("GET_QUEUE_CONTEXT_FAILED", e.message, null)

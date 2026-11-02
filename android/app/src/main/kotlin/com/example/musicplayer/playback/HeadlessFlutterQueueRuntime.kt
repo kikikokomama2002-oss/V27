@@ -4,6 +4,9 @@ import android.content.Context
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.EventChannel
+import com.example.musicplayer.channels.PlayerEventChannel
+import com.example.musicplayer.channels.PLAYER_EVENT_CHANNEL_NAME
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -22,11 +25,21 @@ class HeadlessFlutterQueueRuntime(private val appContext: Context) : QueuePagePr
 
     private val engine = FlutterEngine(appContext)
     private val channel = MethodChannel(engine.dartExecutor.binaryMessenger, CHANNEL)
+    private val eventChannel = EventChannel(
+        engine.dartExecutor.binaryMessenger,
+        PLAYER_EVENT_CHANNEL_NAME,
+    )
+    private val playerEventChannel = PlayerEventChannel()
     private val ready = CompletableDeferred<Unit>()
-    private val nativePlayerChannel = com.example.musicplayer.channels.PlayerChannel(appContext, channel) { }
+    private val nativePlayerChannel = com.example.musicplayer.channels.PlayerChannel(
+        appContext,
+        channel,
+        isHeadless = true
+    ) { }
     private val delegate = MethodChannelQueuePageProvider(channel)
 
     init {
+        eventChannel.setStreamHandler(playerEventChannel)
         channel.setMethodCallHandler { call, result ->
             if (call.method == "headlessReady") {
                 ready.complete(Unit)
@@ -66,6 +79,7 @@ class HeadlessFlutterQueueRuntime(private val appContext: Context) : QueuePagePr
     fun destroy() {
         if (!ready.isCompleted) ready.cancel()
         channel.setMethodCallHandler(null)
+        eventChannel.setStreamHandler(null)
         nativePlayerChannel.dispose()
         engine.destroy()
     }

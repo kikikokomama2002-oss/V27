@@ -6,7 +6,6 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../playback/player_channel.dart';
 
 import '../../core/theme_mode_provider.dart';
-import '../../core/library_tab_settings.dart';
 import '../../core/permissions.dart';
 import '../../core/playlist_store.dart';
 import '../../core/providers.dart';
@@ -154,7 +153,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ref.read(themeModeProvider.notifier).setDarkMode(value);
             },
           ),
-          const _ManageTabsSetting(),
           _NativeSwitchSetting(
             icon: Icons.devices,
             title: 'Allow external devices to start playback',
@@ -358,44 +356,47 @@ class _SleepTimerSettingState extends State<_SleepTimerSetting> {
       text: _selectedMinutes?.toString() ?? '20',
     );
 
-    final minutes = await showDialog<int>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Custom sleep timer'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Minutes',
-            helperText: 'Enter a duration from 1 to 720 minutes.',
+    int? minutes;
+    try {
+      minutes = await showDialog<int>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Custom sleep timer'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Minutes',
+              helperText: 'Enter a duration from 1 to 720 minutes.',
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = int.tryParse(controller.text.trim());
+                if (value == null || value < 1 || value > 720) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Enter a whole number from 1 to 720.'),
+                    ),
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext, value);
+              },
+              child: const Text('Start'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = int.tryParse(controller.text.trim());
-              if (value == null || value < 1 || value > 720) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('Enter a whole number from 1 to 720.'),
-                  ),
-                );
-                return;
-              }
-              Navigator.pop(dialogContext, value);
-            },
-            child: const Text('Start'),
-          ),
-        ],
-      ),
-    );
-
-    controller.dispose();
+      );
+    } finally {
+      controller.dispose();
+    }
 
     if (minutes != null && mounted) {
       await _startTimer(minutes);
@@ -471,68 +472,6 @@ class _SleepTimerSettingState extends State<_SleepTimerSetting> {
           await _startTimer(choice);
         }
       },
-    );
-  }
-}
-
-class _ManageTabsSetting extends StatelessWidget {
-  const _ManageTabsSetting();
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: const Icon(Icons.tab),
-      title: const Text('Manage tabs'),
-      subtitle: const Text('Choose which library tabs appear and reorder them.'),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const _ManageTabsScreen()),
-      ),
-    );
-  }
-}
-
-class _ManageTabsScreen extends ConsumerWidget {
-  const _ManageTabsScreen();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final config = ref.watch(libraryTabSettingsProvider);
-    final controller = ref.read(libraryTabSettingsProvider.notifier);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Manage tabs')),
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Text('Drag to change the order. Turn off tabs you do not use.'),
-          ),
-          ReorderableListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            buildDefaultDragHandles: false,
-            itemCount: config.order.length,
-            onReorderItem: controller.reorder,
-            itemBuilder: (context, index) {
-              final tab = config.order[index];
-              final isVisible = config.visible.contains(tab);
-              return ListTile(
-                key: ValueKey<String>('library-tab-${tab.name}'),
-                leading: ReorderableDragStartListener(
-                  index: index,
-                  child: const Icon(Icons.drag_handle),
-                ),
-                title: Text(tab.label),
-                trailing: Switch(
-                  value: isVisible,
-                  onChanged: (value) => controller.setVisible(tab, value),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
     );
   }
 }

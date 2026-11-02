@@ -1,6 +1,7 @@
 package com.example.musicplayer
 
 import android.content.Intent
+import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.musicplayer.channels.PLAYER_CHANNEL_NAME
 import com.example.musicplayer.channels.PLAYER_EVENT_CHANNEL_NAME
@@ -95,7 +96,16 @@ class MainActivity : FlutterFragmentActivity() {
         // teardown for background playback. Before disposing the foreground
         // MethodChannel, move logical queue paging to a headless Dart engine
         // so a large query-backed queue remains refillable at its window edge.
-        runCatching { com.example.musicplayer.playback.PlayerHolder.ensureHeadlessQueueProvider(applicationContext) }
+        runCatching {
+            com.example.musicplayer.playback.PlayerHolder
+                .ensureHeadlessQueueProvider(applicationContext)
+        }.onFailure { error ->
+            Log.e(
+                "V27Playback",
+                "Failed to transfer queue paging to the headless provider",
+                error
+            )
+        }
         playerChannel?.dispose()
         playerChannel = null
         pendingFolderAccessResult?.error("ENGINE_DISPOSED", "Flutter engine disposed", null)

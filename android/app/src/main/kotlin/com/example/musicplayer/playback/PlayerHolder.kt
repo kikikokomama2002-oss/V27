@@ -50,22 +50,12 @@ object PlayerHolder {
     private val queueScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val queueWindowController = QueueWindowController(queueScope)
 
-    /** Caps queued same-direction transport intents (see the pending-count
-     * fields below) so a stuck controller or runaway button repeat can't
-     * queue an unbounded number of pending skips. */
+    /** Bounds queued notification transport intents while one is executing. */
     private const val MAX_PENDING_TRANSPORT_INTENTS = 8
-    private var mediaSessionSkipNextJob: Job? = null
-    private var mediaSessionSkipPreviousJob: Job? = null
-    // Counts (not just flags) queued transport intents that arrived while a
-    // skip was already in flight, so a burst of same-direction button
-    // presses results in that many navigations run in order instead of a
-    // single Boolean's "at least one more happened" collapsing everything
-    // past the first into one. Bounded by MAX_PENDING_TRANSPORT_INTENTS: a
-    // stuck/misbehaving controller cannot queue an unlimited number of
-    // pending skips, and any intents beyond that bound are intentionally
-    // dropped rather than queued — see the admission checks below.
-    private var mediaSessionSkipNextPendingCount = 0
-    private var mediaSessionSkipPreviousPendingCount = 0
+    private enum class MediaSessionTransportIntent { NEXT, PREVIOUS }
+    private val pendingMediaSessionTransportIntents =
+        mutableListOf<MediaSessionTransportIntent>()
+    private var mediaSessionTransportJob: Job? = null
     private var headlessQueueRuntime: HeadlessFlutterQueueRuntime? = null
 
     private const val PLAYBACK_SETTINGS_PREFS = "v27_playback_settings"
@@ -198,7 +188,7 @@ object PlayerHolder {
         autoPlay: Boolean = true
     ): Boolean {
         player(context) // ensure created
-        return queueWindowController.setContext(
+        val accepted = queueWindowController.setContext(
             contextId,
             queueGeneration,
             queueGenerationEpoch,
@@ -210,6 +200,15 @@ object PlayerHolder {
             startPositionMs,
             autoPlay,
         )
+
+        if (accepted) {
+            val oldTransportJob = mediaSessionTransportJob
+            mediaSessionTransportJob = null
+            pendingMediaSessionTransportIntents.clear()
+            oldTransportJob?.cancel()
+        }
+
+        return accepted
     }
 
     /** See [QueueWindowController.removeItems] — FIX #2 deletion handling. */
@@ -253,9 +252,18 @@ object PlayerHolder {
     @Synchronized
     fun reattachQueueProvider(channel: MethodChannel) {
         val existing = _player ?: return
-        headlessQueueRuntime?.destroy()
+        val previousRuntime = headlessQueueRuntime
+        val foregroundProvider = MethodChannelQueuePageProvider(channel)
+
+        // Switch providers first so the controller never points at a
+        // destroyed headless engine.
+        queueWindowController.attach(existing, foregroundProvider)
+
         headlessQueueRuntime = null
-        queueWindowController.attach(existing, MethodChannelQueuePageProvider(channel))
+        runCatching { previousRuntime?.destroy() }
+            .onFailure {
+                Log.w("V27Playback", "Failed to destroy old headless queue runtime", it)
+            }
     }
 
     /**
@@ -268,9 +276,18 @@ object PlayerHolder {
     fun ensureHeadlessQueueProvider(context: Context) {
         if (_player == null || queueWindowController.currentContextId() == null) return
         if (headlessQueueRuntime != null) return
+
         val runtime = HeadlessFlutterQueueRuntime(context.applicationContext)
-        headlessQueueRuntime = runtime
-        queueWindowController.attach(player(context), runtime)
+        try {
+            queueWindowController.attach(player(context), runtime)
+            headlessQueueRuntime = runtime
+        } catch (error: Throwable) {
+            runCatching { runtime.destroy() }
+                .onFailure {
+                    Log.w("V27Playback", "Failed to clean up headless queue runtime", it)
+                }
+            throw error
+        }
     }
 
     @Synchronized
@@ -471,119 +488,99 @@ object PlayerHolder {
      * null means there is no logical queue and the caller may delegate to the
      * normal Media3 player behavior.
      */
-    fun dispatchMediaSessionSkipNext(): Int? {
-        synchronized(this) {
-            if (queueWindowController.currentContextId() == null) return null
-            val p = _player ?: return SessionResult.RESULT_ERROR_INVALID_STATE
-            if (p.hasNextMediaItem() && queueWindowController.isWindowLibraryGenerationCurrent()) {
-                queueWindowController.markExternalTransportCommand()
-                p.seekToNextMediaItem()
-                return SessionResult.RESULT_SUCCESS
-            }
-            if (mediaSessionSkipNextJob?.isActive == true) {
-                // Queue this intent instead of collapsing every repeated NEXT
-                // command past the first into "at most one more" while a
-                // page is loading — see [startSkipNextJob], which drains
-                // these one at a time, in order, as each run completes.
-                // Intents beyond MAX_PENDING_TRANSPORT_INTENTS are dropped;
-                // this is a deliberate resource bound, not a lossless queue.
-                if (mediaSessionSkipNextPendingCount < MAX_PENDING_TRANSPORT_INTENTS) {
-                    mediaSessionSkipNextPendingCount++
-                }
-                return SessionResult.RESULT_INFO_SKIPPED
-            }
-            startSkipNextJob()
-            return SessionResult.RESULT_INFO_SKIPPED
-        }
-    }
+    fun dispatchMediaSessionSkipNext(): Int? =
+        enqueueMediaSessionTransportIntent(MediaSessionTransportIntent.NEXT)
+
+    fun dispatchMediaSessionSkipPrevious(): Int? =
+        enqueueMediaSessionTransportIntent(MediaSessionTransportIntent.PREVIOUS)
 
     /**
-     * Starts one [QueueWindowController.skipNext] run and registers it in
-     * [mediaSessionSkipNextJob]. Must be called while holding the
-     * [PlayerHolder] monitor (both call sites already do). On completion,
-     * if further NEXT intents queued up in [mediaSessionSkipNextPendingCount]
-     * while this run was in flight, it drains exactly one of them by
-     * recursively starting the next run — so a burst of up to
-     * `1 + MAX_PENDING_TRANSPORT_INTENTS` rapid presses produces that many
-     * navigations in order. Any presses beyond that bound are dropped at
-     * admission (see [dispatchMediaSessionSkipNext]), not queued here.
+     * Admit notification transport commands into one FIFO queue so NEXT and PREVIOUS
+     * cannot overtake each other while an edge-page request is in flight.
+     * The active command is separate from the maximum of eight waiting commands.
      */
-    private fun startSkipNextJob() {
-        val job = queueScope.launch(start = CoroutineStart.LAZY) {
-            try {
-                runCatching { queueWindowController.skipNext() }
-                    .onFailure { error ->
-                        Log.e("V27Playback", "Notification NEXT failed", error)
-                    }
-            } finally {
-                synchronized(this@PlayerHolder) {
-                    if (mediaSessionSkipNextJob === this.coroutineContext[kotlinx.coroutines.Job]) {
-                        mediaSessionSkipNextJob = null
-                        if (mediaSessionSkipNextPendingCount > 0) {
-                            mediaSessionSkipNextPendingCount--
-                            startSkipNextJob()
-                        }
-                    }
-                }
-            }
-        }
-        mediaSessionSkipNextJob = job
-        job.start()
-    }
-
-    fun dispatchMediaSessionSkipPrevious(): Int? {
+    private fun enqueueMediaSessionTransportIntent(
+        intent: MediaSessionTransportIntent
+    ): Int? {
         synchronized(this) {
             if (queueWindowController.currentContextId() == null) return null
-            val p = _player ?: return SessionResult.RESULT_ERROR_INVALID_STATE
-            if (queueWindowController.shouldRestartCurrentTrack(p.currentPosition)) {
-                queueWindowController.markExternalTransportCommand()
-                p.seekTo(0)
-                return SessionResult.RESULT_SUCCESS
-            }
-            if (p.hasPreviousMediaItem() && queueWindowController.isWindowLibraryGenerationCurrent()) {
-                queueWindowController.markExternalTransportCommand()
-                p.seekToPreviousMediaItem()
-                return SessionResult.RESULT_SUCCESS
-            }
-            if (mediaSessionSkipPreviousJob?.isActive == true) {
-                // Queue this intent instead of collapsing every repeated
-                // PREVIOUS command past the first into "at most one more"
-                // while a page is loading — see [startSkipPreviousJob],
-                // which drains these one at a time, in order, as each run
-                // completes. Intents beyond MAX_PENDING_TRANSPORT_INTENTS
-                // are dropped; this is a deliberate resource bound, not a
-                // lossless queue.
-                if (mediaSessionSkipPreviousPendingCount < MAX_PENDING_TRANSPORT_INTENTS) {
-                    mediaSessionSkipPreviousPendingCount++
+            if (_player == null) return SessionResult.RESULT_ERROR_INVALID_STATE
+
+            if (mediaSessionTransportJob?.isActive == true) {
+                if (pendingMediaSessionTransportIntents.size >= MAX_PENDING_TRANSPORT_INTENTS) {
+                    Log.w(
+                        "V27Playback",
+                        "Notification $intent rejected: transport queue is full"
+                    )
+                    return SessionResult.RESULT_ERROR_INVALID_STATE
                 }
+
+                pendingMediaSessionTransportIntents.add(intent)
                 return SessionResult.RESULT_INFO_SKIPPED
             }
-            startSkipPreviousJob()
+
+            pendingMediaSessionTransportIntents.add(intent)
+            startMediaSessionTransportJob()
             return SessionResult.RESULT_INFO_SKIPPED
         }
     }
 
-    /** PREVIOUS counterpart of [startSkipNextJob]; see its doc comment. */
-    private fun startSkipPreviousJob() {
+    /** Must be called while holding the PlayerHolder monitor. */
+    private fun startMediaSessionTransportJob() {
+        if (mediaSessionTransportJob?.isActive == true) return
+        if (pendingMediaSessionTransportIntents.isEmpty()) return
+
         val job = queueScope.launch(start = CoroutineStart.LAZY) {
             try {
-                runCatching { queueWindowController.skipPrevious() }
-                    .onFailure { error ->
-                        Log.e("V27Playback", "Notification PREVIOUS failed", error)
+                while (true) {
+                    val intent = synchronized(this@PlayerHolder) {
+                        if (mediaSessionTransportJob !==
+                            this.coroutineContext[Job]
+                        ) {
+                            return@launch
+                        }
+                        if (pendingMediaSessionTransportIntents.isEmpty()) {
+                            null
+                        } else {
+                            pendingMediaSessionTransportIntents.removeAt(0)
+                        }
+                    } ?: break
+
+                    runCatching {
+                        when (intent) {
+                            MediaSessionTransportIntent.NEXT ->
+                                queueWindowController.skipNext()
+                            MediaSessionTransportIntent.PREVIOUS ->
+                                queueWindowController.skipPrevious()
+                        }
+                    }.onFailure { error ->
+                        if (error is java.util.concurrent.CancellationException) {
+                            throw error
+                        }
+                        Log.e(
+                            "V27Playback",
+                            "Notification $intent failed",
+                            error
+                        )
                     }
+                }
             } finally {
                 synchronized(this@PlayerHolder) {
-                    if (mediaSessionSkipPreviousJob === this.coroutineContext[kotlinx.coroutines.Job]) {
-                        mediaSessionSkipPreviousJob = null
-                        if (mediaSessionSkipPreviousPendingCount > 0) {
-                            mediaSessionSkipPreviousPendingCount--
-                            startSkipPreviousJob()
+                    if (mediaSessionTransportJob ===
+                        this.coroutineContext[Job]
+                    ) {
+                        mediaSessionTransportJob = null
+                        // If a command arrived as the worker was finishing,
+                        // start another worker without losing its FIFO order.
+                        if (pendingMediaSessionTransportIntents.isNotEmpty()) {
+                            startMediaSessionTransportJob()
                         }
                     }
                 }
             }
         }
-        mediaSessionSkipPreviousJob = job
+
+        mediaSessionTransportJob = job
         job.start()
     }
 
@@ -610,6 +607,13 @@ object PlayerHolder {
         synchronized(this) { queueWindowController.clearLibraryGeneration() }
     }
 
+    @Synchronized
+    fun clearLibraryGenerationIfNoHeadlessQueueProvider() {
+        if (headlessQueueRuntime == null) {
+            queueWindowController.clearLibraryGeneration()
+        }
+    }
+
     fun release() {
         // Serialize the ENTIRE teardown with player(context)/setQueueContext.
         // Previously releaseContext() happened before taking this object's
@@ -619,12 +623,9 @@ object PlayerHolder {
         // destruction in one critical section so no new player can slip
         // between them.
         synchronized(this) {
-            mediaSessionSkipNextJob?.cancel()
-            mediaSessionSkipNextJob = null
-            mediaSessionSkipNextPendingCount = 0
-            mediaSessionSkipPreviousJob?.cancel()
-            mediaSessionSkipPreviousJob = null
-            mediaSessionSkipPreviousPendingCount = 0
+            mediaSessionTransportJob?.cancel()
+            mediaSessionTransportJob = null
+            pendingMediaSessionTransportIntents.clear()
             // Tear down the queue controller before releasing the player —
             // a fetch that outlives release() must never apply to a new
             // ExoPlayer instance.

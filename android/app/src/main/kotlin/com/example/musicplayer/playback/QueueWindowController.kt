@@ -195,17 +195,36 @@ class QueueWindowController(private val scope: CoroutineScope) {
     }
 
     fun attach(exoPlayer: ExoPlayer, provider: QueuePageProvider) {
-        withMutationLock {
-            if (player !== exoPlayer) {
+        val providerChanged = withMutationLock {
+            val playerChanged = player !== exoPlayer
+            val pageProviderChanged = pageProvider !== provider
+
+            if (!playerChanged && !pageProviderChanged) {
+                return@withMutationLock false
+            }
+
+            if (playerChanged) {
                 player?.removeListener(listener)
                 exoPlayer.addListener(listener)
                 player = exoPlayer
-                // A different player instance is a different lifecycle epoch.
-                // Invalidate any in-flight page commit before exposing it.
-                mutationGeneration++
-                windowGeneration++
             }
+
+            // Invalidate requests captured from the previous provider/player.
+            mutationGeneration++
+            windowGeneration++
+
+            forwardFetchJob?.cancel()
+            forwardFetchJob = null
+            backwardFetchJob?.cancel()
+            backwardFetchJob = null
+
             pageProvider = provider
+            true
+        }
+
+        // Start any needed prefetch only after the new provider is attached.
+        if (providerChanged) {
+            maybeAdjustWindow()
         }
     }
 
@@ -881,8 +900,9 @@ class QueueWindowController(private val scope: CoroutineScope) {
     suspend fun skipNext(): Boolean = transportMutex.withLock transportLock@{
         val p = player ?: return@transportLock false
         val cid = contextId ?: return@transportLock false
+        // Admit the Next intent before any branch can suspend.
+        markExternalTransportCommand()
         if (p.hasNextMediaItem() && isWindowLibraryGenerationCurrent()) {
-            markExternalTransportCommand()
             p.seekToNextMediaItem()
             return@transportLock true
         }

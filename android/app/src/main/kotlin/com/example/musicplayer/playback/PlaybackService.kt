@@ -1,6 +1,8 @@
 package com.example.musicplayer.playback
 
+import android.app.PendingIntent
 import android.content.Intent
+import com.example.musicplayer.MainActivity
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.util.UnstableApi
@@ -108,6 +110,18 @@ class PlaybackService : MediaSessionService() {
         }
         mediaSession = synchronized(PlayerHolder) {
             MediaSession.Builder(this, PlayerHolder.player(this))
+                .setSessionActivity(
+                    PendingIntent.getActivity(
+                        this,
+                        0,
+                        Intent(this, MainActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                                Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        },
+                        PendingIntent.FLAG_UPDATE_CURRENT or
+                            PendingIntent.FLAG_IMMUTABLE
+                    )
+                )
                 .setCallback(callback)
                 .build()
         }

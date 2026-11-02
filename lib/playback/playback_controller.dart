@@ -97,6 +97,11 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   }
 
   final Ref _ref;
+  final Completer<void> _initialQueueRestoreCompleted = Completer<void>();
+
+  Future<void> get initialQueueRestoreCompleted =>
+      _initialQueueRestoreCompleted.future;
+
   String? _lastSavedPlaybackIdentity;
   int _lastPlaybackSaveAtMs = 0;
 
@@ -377,6 +382,16 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   }
 
   Future<void> _restoreQueueContext() async {
+    try {
+      await _restoreQueueContextImpl();
+    } finally {
+      if (!_initialQueueRestoreCompleted.isCompleted) {
+        _initialQueueRestoreCompleted.complete();
+      }
+    }
+  }
+
+  Future<void> _restoreQueueContextImpl() async {
     final restoreGeneration = _queueGenerationGate.begin();
     final prefs = await SharedPreferences.getInstance();
     if (_activeContextId != null) return;
@@ -768,6 +783,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         final requestId = (args['requestId'] as num?)?.toInt();
         if (offset < 0 || limit <= 0 || limit > 240) {
           return {
+            'status': 'indeterminate',
             'items': const <Map<String, dynamic>>[],
             'totalCount': 0,
             'startIndex': offset,
@@ -780,6 +796,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         // avoid doing a wasted DB query for it here as well.
         if (contextId != _activeContextId || _activeSpec == null) {
           return {
+            'status': 'indeterminate',
             'items': const <Map<String, dynamic>>[],
             'totalCount': 0,
             'libraryGeneration': _repo?.libraryGeneration ?? 0,
@@ -788,9 +805,11 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         final repo = _repo;
         if (repo == null) {
           return {
+            'status': 'indeterminate',
             'items': const <Map<String, dynamic>>[],
             'totalCount': 0,
-            'libraryGeneration': _repo?.libraryGeneration ?? 0,
+            'startIndex': offset,
+            'libraryGeneration': 0,
           };
         }
 
@@ -927,10 +946,11 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         final repo = _repo;
         if (repo == null) {
           return {
+            'status': 'indeterminate',
             'items': const <Map<String, dynamic>>[],
             'totalCount': 0,
             'startIndex': 0,
-            'libraryGeneration': _repo?.libraryGeneration ?? 0,
+            'libraryGeneration': 0,
           };
         }
         if (requestId != null) _pendingRequestIds.add(requestId);
