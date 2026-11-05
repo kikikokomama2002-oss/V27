@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
+import '../../core/theme.dart';
 import '../../data/db/track.dart';
 import '../../playback/player_channel.dart';
 import 'lrc_parser.dart';
@@ -206,44 +207,50 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
   Widget build(BuildContext context) {
     final playback = ref.watch(playbackControllerProvider);
 
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.track.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: const Text('LYRICS'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 18),
+            child: Center(
+              child: Icon(Icons.music_note_rounded,
+                  color: V27Palette.violet, size: 23),
+            ),
+          ),
+        ],
       ),
       body: FutureBuilder<_LyricsResult>(
         future: _lyricsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: CircularProgressIndicator(color: V27Palette.violet),
+            );
           }
           if (snapshot.hasError) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline, size: 40),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Could not load lyrics: ${snapshot.error}',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton(
-                      onPressed: () {
-                        setState(() {
-                          _lastActiveIndex = -1;
-                          _inactiveLineOffsets
-                            ..clear()
-                            ..add(0.0);
-                          _cachedGeometryWidth = null;
-                          _lyricsFuture = _loadLyrics(forceRefresh: true);
-                        });
-                      },
-                      child: const Text('Retry'),
-                    ),
-                  ],
+                child: _LyricsInfoPanel(
+                  icon: Icons.cloud_off_rounded,
+                  title: 'Could not load lyrics',
+                  message: '${snapshot.error}',
+                  action: FilledButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _lastActiveIndex = -1;
+                        _inactiveLineOffsets
+                          ..clear()
+                          ..add(0.0);
+                        _cachedGeometryWidth = null;
+                        _lyricsFuture = _loadLyrics(forceRefresh: true);
+                      });
+                    },
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Try again'),
+                  ),
                 ),
               ),
             );
@@ -255,56 +262,39 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
           if (lines.isEmpty && result.plainText == null) {
             return Center(
               child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      result.canRequestFolderAccess
-                          ? 'No embedded lyrics found for this track.\nIf you have a matching .lrc file next to it, grant folder access to find it.'
-                          : 'No lyrics found for this track (checked embedded tags and a sidecar .lrc file).\nAdd lyrics via a tag editor, or place a matching .lrc file next to the song.',
-                      textAlign: TextAlign.center,
-                    ),
-                    if (_folderAccessError != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        _folderAccessError!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Theme.of(context).colorScheme.error),
-                      ),
-                    ],
-                    if (result.canRequestFolderAccess) ...[
-                      const SizedBox(height: 16),
-                      FilledButton.tonal(
-                        onPressed: _requestingFolderAccess
-                            ? null
-                            : _grantFolderAccessAndRetry,
-                        child: _requestingFolderAccess
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('Grant folder access'),
-                      ),
-                    ],
-                  ],
+                padding: const EdgeInsets.all(28),
+                child: _LyricsInfoPanel(
+                  icon: Icons.lyrics_outlined,
+                  title: 'No lyrics found',
+                  message: result.canRequestFolderAccess
+                      ? 'No embedded lyrics found for this track. If you have a matching .lrc file next to it, grant folder access to find it.'
+                      : 'We checked embedded tags and a sidecar .lrc file. Add lyrics with a tag editor, or place a matching .lrc file next to the song.',
+                  error: _folderAccessError,
+                  action: result.canRequestFolderAccess
+                      ? FilledButton.icon(
+                          onPressed: _requestingFolderAccess
+                              ? null
+                              : _grantFolderAccessAndRetry,
+                          icon: _requestingFolderAccess
+                              ? const SizedBox(
+                                  width: 17,
+                                  height: 17,
+                                  child: CircularProgressIndicator(strokeWidth: 2)
+                                )
+                              : const Icon(Icons.folder_open_rounded),
+                          label: Text(_requestingFolderAccess
+                              ? 'Opening folder…'
+                              : 'Grant folder access'),
+                        )
+                      : null,
                 ),
               ),
             );
           }
 
           if (lines.isEmpty) {
-            // Unsynced lyrics: no timeline to drive auto-scroll or
-            // highlighting, so just show the raw text.
-            return SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
-              child: Text(
-                result.plainText!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16, height: 1.5),
-              ),
-            );
+            // Unsynced lyrics: no timeline to drive auto-scroll or highlighting.
+            return _PlainLyricsView(track: widget.track, text: result.plainText!);
           }
 
           final activeIndex = LrcParser.activeLineIndex(lines, playback.position);
@@ -313,29 +303,236 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
             (_) => _maybeAutoScroll(lines, playback.position, maxWidth),
           );
 
-          return ListView.builder(
-            controller: _scrollController,
-            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
-            itemCount: lines.length,
-            itemBuilder: (context, index) {
-              final isActive = index == activeIndex;
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Text(
-                  lines[index].text,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: isActive ? 20 : 16,
-                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
-                    color: isActive
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).textTheme.bodyLarge?.color?.withOpacity(0.5),
-                  ),
+          return Column(
+            children: [
+              _LyricsTrackHeader(track: widget.track, synced: true),
+              Expanded(
+                child: ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.fromLTRB(24, 30, 24, 100),
+                  itemCount: lines.length,
+                  itemBuilder: (context, index) {
+                    final isActive = index == activeIndex;
+                    final distance = (index - activeIndex).abs();
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 280),
+                      curve: Curves.easeOut,
+                      margin: const EdgeInsets.symmetric(vertical: 9),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: isActive ? 10 : 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? V27Palette.violet.withValues(alpha: dark ? 0.16 : 0.10)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
+                        border: isActive
+                            ? Border.all(
+                                color: V27Palette.violet.withValues(alpha: 0.24))
+                            : null,
+                      ),
+                      child: AnimatedDefaultTextStyle(
+                        duration: const Duration(milliseconds: 280),
+                        curve: Curves.easeOut,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: isActive ? 22 : 16,
+                          height: 1.35,
+                          fontWeight:
+                              isActive ? FontWeight.w800 : FontWeight.w500,
+                          color: isActive
+                              ? V27Palette.violet
+                              : Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.color
+                                  ?.withValues(
+                                    alpha: distance == 1 ? 0.58 : 0.32,
+                                  ),
+                        ),
+                        child: Text(lines[index].text),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
+              ),
+            ],
           );
         },
+      ),
+    );
+  }
+}
+
+
+class _LyricsTrackHeader extends StatelessWidget {
+  const _LyricsTrackHeader({required this.track, required this.synced});
+
+  final Track track;
+  final bool synced;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(18, 8, 18, 0),
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: Theme.of(context).brightness == Brightness.dark
+              ? const [Color(0xFF252044), Color(0xFF151D32)]
+              : const [Color(0xFFECE6FF), Color(0xFFF4F7FF)],
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: V27Palette.violet.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 45,
+            height: 45,
+            decoration: BoxDecoration(
+              color: V27Palette.violet.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.music_note_rounded,
+                color: V27Palette.violet, size: 25),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(track.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        )),
+                const SizedBox(height: 4),
+                Text(
+                  track.artist,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).hintColor,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            children: [
+              Icon(Icons.graphic_eq_rounded,
+                  color: synced ? V27Palette.cyan : V27Palette.violet),
+              const SizedBox(height: 3),
+              Text(
+                synced ? 'SYNCED' : 'LYRICS',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      fontSize: 9,
+                      letterSpacing: 0.8,
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlainLyricsView extends StatelessWidget {
+  const _PlainLyricsView({required this.track, required this.text});
+
+  final Track track;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _LyricsTrackHeader(track: track, synced: false),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(26, 28, 26, 48),
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    fontSize: 17,
+                    height: 1.85,
+                    fontWeight: FontWeight.w500,
+                  ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LyricsInfoPanel extends StatelessWidget {
+  const _LyricsInfoPanel({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.error,
+    this.action,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? error;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(25),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 62,
+            height: 62,
+            decoration: BoxDecoration(
+              color: V27Palette.violet.withValues(alpha: 0.13),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(icon, color: V27Palette.violet, size: 31),
+          ),
+          const SizedBox(height: 17),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: 9),
+          Text(message, textAlign: TextAlign.center),
+          if (error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              error!,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
+          if (action != null) ...[
+            const SizedBox(height: 19),
+            action!,
+          ],
+        ],
       ),
     );
   }

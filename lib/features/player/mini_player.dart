@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/providers.dart';
+import '../../core/theme.dart';
 import '../../core/widgets/track_artwork.dart';
 import 'now_playing_screen.dart';
 
-/// Persistent bottom bar showing the current track with play/pause and
-/// skip controls. Tapping it opens the full Now Playing screen.
+/// Persistent V27 PULSE playback bar.
 class MiniPlayer extends ConsumerWidget {
   const MiniPlayer({super.key});
 
@@ -17,87 +18,142 @@ class MiniPlayer extends ConsumerWidget {
 
     if (track == null) return const SizedBox.shrink();
 
-    final progress = playback.duration.inMilliseconds == 0
+    final durationMs = playback.duration.inMilliseconds;
+    final progress = durationMs <= 0
         ? 0.0
-        : playback.position.inMilliseconds / playback.duration.inMilliseconds;
+        : (playback.position.inMilliseconds / durationMs)
+            .clamp(0.0, 1.0)
+            .toDouble();
 
-    return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const NowPlayingScreen()),
-      ),
-      child: Material(
-        color: Theme.of(context).cardColor,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            LinearProgressIndicator(
-              value: progress.clamp(0.0, 1.0).toDouble(),
-              minHeight: 2,
-              backgroundColor: Colors.transparent,
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: Colors.transparent,
-                    child: TrackArtwork(
-                      contentUri: track.contentUri,
-                      version: Object.hash(
-          track.derivedCacheEpoch,
-          track.mediaStoreGenerationModified ?? track.dateModified,
-          track.dateModified, track.contentUri, track.relativePath,
-          track.displayName, track.durationMs, track.title, track.artist,
-          track.album, track.folder,
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const NowPlayingScreen(),
+          ),
         ),
-                      size: 40,
-                      artSize: 120,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(track.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w600)),
-                        Text(track.artist,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.color
-                                    ?.withOpacity(0.7))),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.skip_previous),
-                    onPressed: controller.previous,
-                  ),
-                  IconButton(
-                    icon: Icon(playback.isPlaying
-                        ? Icons.pause_circle_filled
-                        : Icons.play_circle_filled),
-                    iconSize: 36,
-                    onPressed: controller.togglePlayPause,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.skip_next),
-                    onPressed: controller.next,
-                  ),
-                ],
+        child: Container(
+          decoration: BoxDecoration(
+            color: isDark
+                ? V27Palette.darkSurface
+                : theme.colorScheme.surface,
+            border: Border(
+              top: BorderSide(
+                color: theme.dividerColor.withValues(alpha: 0.7),
+                width: 0.8,
               ),
             ),
-          ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 8, 8),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: TrackArtwork(
+                        contentUri: track.contentUri,
+                        version: Object.hash(
+                          track.derivedCacheEpoch,
+                          track.mediaStoreGenerationModified ??
+                              track.dateModified,
+                          track.dateModified,
+                          track.contentUri,
+                          track.relativePath,
+                          track.displayName,
+                          track.durationMs,
+                          track.title,
+                          track.artist,
+                          track.album,
+                          track.folder,
+                        ),
+                        size: 46,
+                        artSize: 128,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            track.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.1,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            track.artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Previous',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: controller.previous,
+                      icon: const Icon(Icons.skip_previous_rounded),
+                    ),
+                    IconButton(
+                      tooltip: playback.isPlaying ? 'Pause' : 'Play',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: controller.togglePlayPause,
+                      style: IconButton.styleFrom(
+                        backgroundColor: V27Palette.violet,
+                        foregroundColor: Colors.white,
+                        fixedSize: const Size(42, 42),
+                      ),
+                      icon: Icon(
+                        playback.isPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        size: 25,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Next',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: controller.next,
+                      icon: const Icon(Icons.skip_next_rounded),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 7),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 2.5,
+                    backgroundColor:
+                        theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      V27Palette.cyan,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
