@@ -117,14 +117,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Container(
             padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF29204F), Color(0xFF142C43)],
+                colors: isDark
+                    ? const [V27Palette.midnight, Color(0xFF103B3A)]
+                    : const [Color(0xFFDDF4F1), Color(0xFFE9EEF2)],
               ),
-              borderRadius: BorderRadius.circular(25),
+              borderRadius: BorderRadius.circular(V27Radius.xl),
               border: Border.all(
-                color: V27Palette.violet.withValues(alpha: 0.25),
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.22),
               ),
             ),
             child: Row(
@@ -133,44 +135,44 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   width: 58,
                   height: 58,
                   decoration: BoxDecoration(
-                    color: V27Palette.violet.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(18),
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(V27Radius.lg),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.tune_rounded,
-                    color: Color(0xFFB9A5FF),
+                    color: Theme.of(context).colorScheme.primary,
                     size: 30,
                   ),
                 ),
                 const SizedBox(width: 16),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'MAKE IT YOURS',
                         style: TextStyle(
-                          color: Color(0xFFB9A5FF),
+                          color: isDark ? V27Palette.electricTeal : V27Palette.deepTeal,
                           fontSize: 10,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 2,
                         ),
                       ),
-                      SizedBox(height: 6),
+                      const SizedBox(height: 6),
                       Text(
                         'Your listening space.',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.onSurface,
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.4,
                         ),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
                         'Fine-tune the way V27 sounds and feels.',
                         style: TextStyle(
-                          color: Color(0xFFD0CBE5),
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 12,
                         ),
                       ),
@@ -314,12 +316,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
             child: Row(
               children: [
-                Icon(icon, size: 17, color: V27Palette.violet),
+                Icon(icon, size: 17, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 9),
                 Text(
                   title.toUpperCase(),
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: V27Palette.violet,
+                        color: Theme.of(context).colorScheme.primary,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 1.6,
                       ),
@@ -1008,11 +1010,13 @@ Future<void> _createPlaylistFromUi(BuildContext context, WidgetRef ref) async {
 class _ManagePlaylistsScreen extends ConsumerWidget {
   const _ManagePlaylistsScreen();
 
+  // Curated cover identities stay varied; Teal remains the app accent,
+  // rather than forcing every playlist tile into the same brand gradient.
   static const _gradients = <List<Color>>[
-    [Color(0xFF7656E8), Color(0xFF392A78)],
-    [Color(0xFF168FA0), Color(0xFF164B66)],
-    [Color(0xFFE07852), Color(0xFF783D5D)],
+    [Color(0xFF168F91), Color(0xFF164B58)],
+    [Color(0xFFE07852), Color(0xFF783D45)],
     [Color(0xFF4779C7), Color(0xFF263B70)],
+    [Color(0xFF668B62), Color(0xFF294D43)],
   ];
 
   @override
@@ -1053,7 +1057,7 @@ class _ManagePlaylistsScreen extends ConsumerWidget {
                             Text(
                               'YOUR COLLECTION',
                               style: TextStyle(
-                                color: V27Palette.violet,
+                                color: Theme.of(context).colorScheme.primary,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 2.0,
@@ -1289,12 +1293,12 @@ class _PlaylistEmptyState extends StatelessWidget {
               height: 112,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: V27Palette.violet.withValues(alpha: 0.12),
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.queue_music_rounded,
                 size: 52,
-                color: V27Palette.violet,
+                color: Theme.of(context).colorScheme.primary,
               ),
             ),
             const SizedBox(height: 25),
@@ -1400,12 +1404,12 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                       height: 104,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: V27Palette.violet.withValues(alpha: 0.12),
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.queue_music_rounded,
                         size: 48,
-                        color: V27Palette.violet,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -1464,12 +1468,12 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: isDark
-                                ? const [Color(0xFF29204F), Color(0xFF142C43)]
-                                : const [Color(0xFFECE7FF), Color(0xFFE2F5FA)],
+                                ? const [V27Palette.midnight, Color(0xFF103B3A)]
+                                : const [Color(0xFFDDF4F1), Color(0xFFE9EEF2)],
                           ),
-                          borderRadius: BorderRadius.circular(26),
+                          borderRadius: BorderRadius.circular(V27Radius.xl),
                           border: Border.all(
-                            color: V27Palette.violet.withValues(alpha: 0.18),
+                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.22),
                           ),
                         ),
                         child: Column(
@@ -1481,13 +1485,13 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                                   width: 76,
                                   height: 76,
                                   decoration: BoxDecoration(
-                                    color: V27Palette.violet.withValues(alpha: 0.22),
+                                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.16),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.queue_music_rounded,
                                     size: 42,
-                                    color: V27Palette.violet,
+                                    color: Theme.of(context).colorScheme.primary,
                                   ),
                                 ),
                                 const SizedBox(width: 16),
@@ -1495,10 +1499,10 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Text(
+                                      Text(
                                         'YOUR PLAYLIST',
                                         style: TextStyle(
-                                          color: V27Palette.violet,
+                                          color: Theme.of(context).colorScheme.primary,
                                           fontSize: 10,
                                           fontWeight: FontWeight.w900,
                                           letterSpacing: 1.8,
@@ -1540,8 +1544,8 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                                 icon: const Icon(Icons.play_arrow_rounded),
                                 label: const Text('Play all'),
                                 style: FilledButton.styleFrom(
-                                  backgroundColor: V27Palette.violet,
-                                  foregroundColor: Colors.white,
+                                  backgroundColor: Theme.of(context).colorScheme.primary,
+                                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
                                   padding: const EdgeInsets.symmetric(vertical: 14),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(15),
@@ -1679,7 +1683,7 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                                           Text(
                                             _formatDuration(track.durationMs),
                                             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                                  color: V27Palette.violet,
+                                                  color: Theme.of(context).colorScheme.primary,
                                                   fontWeight: FontWeight.w700,
                                                 ),
                                           ),
@@ -1692,7 +1696,7 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                                         ? Icons.play_circle_outline_rounded
                                         : Icons.warning_amber_rounded,
                                     color: available
-                                        ? V27Palette.violet
+                                        ? Theme.of(context).colorScheme.primary
                                         : Theme.of(context).colorScheme.onSurfaceVariant,
                                     size: 23,
                                   ),

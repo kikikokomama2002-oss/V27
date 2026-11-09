@@ -133,7 +133,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
             padding: const EdgeInsets.only(right: 18),
             child: Center(
               child: Icon(Icons.graphic_eq_rounded,
-                  color: V27Palette.violet, size: 25),
+                  color: Theme.of(context).colorScheme.primary, size: 25),
             ),
           ),
         ],
@@ -144,8 +144,10 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
 
   Widget _buildBody(BuildContext context, bool dark) {
     if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: V27Palette.violet),
+      return Center(
+        child: CircularProgressIndicator(
+          color: Theme.of(context).colorScheme.primary,
+        ),
       );
     }
 
@@ -200,12 +202,12 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: dark
-                  ? const [Color(0xFF252044), Color(0xFF151D32)]
-                  : const [Color(0xFFECE6FF), Color(0xFFF4F7FF)],
+                  ? const [V27Palette.midnight, V27Palette.deepTeal]
+                  : const [Color(0xFFE4F3F2), Color(0xFFE9EEF2)],
             ),
             borderRadius: BorderRadius.circular(26),
             border: Border.all(
-              color: V27Palette.violet.withValues(alpha: 0.25),
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.25),
             ),
           ),
           child: Row(
@@ -214,11 +216,11 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  color: V27Palette.violet.withValues(alpha: 0.18),
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(17),
                 ),
-                child: const Icon(Icons.equalizer_rounded,
-                    color: V27Palette.violet, size: 30),
+                child: Icon(Icons.equalizer_rounded,
+                    color: Theme.of(context).colorScheme.primary, size: 30),
               ),
               const SizedBox(width: 15),
               Expanded(
@@ -228,7 +230,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
                     Text(
                       'SOUND CONTROL',
                       style: TextStyle(
-                        color: V27Palette.violet,
+                        color: Theme.of(context).colorScheme.primary,
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1.7,
@@ -257,7 +259,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
               ),
               Switch(
                 value: enabled,
-                activeThumbColor: V27Palette.violet,
+                activeThumbColor: Theme.of(context).colorScheme.primary,
                 onChanged: _onEnabledChanged,
               ),
             ],
@@ -283,9 +285,9 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
                   onPressed: enabled
                       ? () => _onPresetSelected(preset['index'] as int)
                       : null,
-                  backgroundColor: V27Palette.violet.withValues(alpha: 0.10),
+                  backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.10),
                   side: BorderSide(
-                    color: V27Palette.violet.withValues(alpha: 0.25),
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.25),
                   ),
                   labelStyle: TextStyle(
                     color: enabled
@@ -324,7 +326,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
                   Text(
                     '0 dB',
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: V27Palette.cyan,
+                          color: Theme.of(context).colorScheme.primary,
                           fontWeight: FontWeight.w800,
                         ),
                   ),
@@ -385,11 +387,11 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: V27Palette.cyan.withValues(alpha: 0.12),
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: const Icon(Icons.surround_sound_rounded,
-                      color: V27Palette.cyan),
+                  child: Icon(Icons.surround_sound_rounded,
+                      color: Theme.of(context).colorScheme.primary),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -409,7 +411,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
                             .toDouble()
                             .clamp(0.0, 1000.0)
                             .toDouble(),
-                        activeColor: V27Palette.cyan,
+                        activeColor: Theme.of(context).colorScheme.primary,
                         onChanged: enabled
                             ? (v) => _onBassBoostChanged(v.round())
                             : null,
@@ -457,8 +459,8 @@ class _BandSlider extends StatelessWidget {
               min: min,
               max: max,
               value: level,
-              activeColor: V27Palette.violet,
-              inactiveColor: V27Palette.violet.withValues(alpha: 0.16),
+              activeColor: Theme.of(context).colorScheme.primary,
+              inactiveColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.18),
               onChanged: enabled ? (v) => onChanged(v.round()) : null,
             ),
           ),
@@ -525,7 +527,7 @@ class _SectionHeading extends StatelessWidget {
           Text(
             trailing!,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: V27Palette.violet,
+                  color: Theme.of(context).colorScheme.primary,
                   fontWeight: FontWeight.w700,
                 ),
           ),
@@ -593,7 +595,7 @@ class _InfoPanel extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 42, color: V27Palette.violet),
+          Icon(icon, size: 42, color: Theme.of(context).colorScheme.primary),
           const SizedBox(height: 16),
           Text(
             title,

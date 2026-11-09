@@ -23,7 +23,7 @@ class OfflineMusicPlayerApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
     return MaterialApp(
-      title: 'Offline Music Player',
+      title: 'V27 PULSE',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.amoledDark(),

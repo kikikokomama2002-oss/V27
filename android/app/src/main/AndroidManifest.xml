@@ -18,7 +18,7 @@
          connected release. -->
 
     <application
-        android:label="Offline Music Player"
+        android:label="V27 PULSE"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:enableOnBackInvokedCallback="true">

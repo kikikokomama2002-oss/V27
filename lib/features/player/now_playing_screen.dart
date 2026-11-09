@@ -13,19 +13,10 @@ import '../lyrics/lyrics_screen.dart';
 class NowPlayingScreen extends ConsumerWidget {
   const NowPlayingScreen({super.key});
 
-  String _fmt(Duration duration) {
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return hours > 0
-        ? '${hours.toString().padLeft(2, '0')}:$minutes:$seconds'
-        : '$minutes:$seconds';
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final track = ref.watch(currentTrackProvider);
-    final playback = ref.watch(playbackControllerProvider);
     final controller = ref.read(playbackControllerProvider.notifier);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -47,7 +38,7 @@ class NowPlayingScreen extends ConsumerWidget {
             Text(
               'V27 PULSE',
               style: theme.textTheme.labelSmall?.copyWith(
-                color: V27Palette.violet,
+                color: theme.colorScheme.primary,
                 letterSpacing: 2.2,
                 fontWeight: FontWeight.w700,
               ),
@@ -99,11 +90,6 @@ class NowPlayingScreen extends ConsumerWidget {
                     constraints.maxWidth - 48,
                     constraints.maxHeight * 0.43,
                   ).clamp(150.0, 360.0).toDouble();
-                  final durationMs = playback.duration.inMilliseconds;
-                  final maxMs = durationMs > 0 ? durationMs.toDouble() : 1.0;
-                  final positionMs = playback.position.inMilliseconds
-                      .clamp(0, durationMs > 0 ? durationMs : 0)
-                      .toDouble();
 
                   return Padding(
                     padding: const EdgeInsets.fromLTRB(24, 12, 24, 18),
@@ -118,12 +104,11 @@ class NowPlayingScreen extends ConsumerWidget {
                             borderRadius: BorderRadius.circular(28),
                             boxShadow: [
                               BoxShadow(
-                                color: V27Palette.violet.withValues(
-                                  alpha: isDark ? 0.24 : 0.13,
+                                color: Colors.black.withValues(
+                                  alpha: isDark ? 0.22 : 0.09,
                                 ),
-                                blurRadius: 38,
-                                spreadRadius: 2,
-                                offset: const Offset(0, 14),
+                                blurRadius: 18,
+                                offset: const Offset(0, 8),
                               ),
                             ],
                           ),
@@ -191,57 +176,7 @@ class NowPlayingScreen extends ConsumerWidget {
                             ],
                           ],
                         ),
-                        Column(
-                          children: [
-                            SliderTheme(
-                              data: SliderTheme.of(context).copyWith(
-                                trackHeight: 4,
-                                activeTrackColor: V27Palette.violet,
-                                inactiveTrackColor: isDark
-                                    ? V27Palette.darkBorder
-                                    : V27Palette.lightBorder,
-                                thumbColor: V27Palette.cyan,
-                                overlayColor:
-                                    V27Palette.violet.withValues(alpha: 0.12),
-                                thumbShape: const RoundSliderThumbShape(
-                                  enabledThumbRadius: 6,
-                                ),
-                                overlayShape: const RoundSliderOverlayShape(
-                                  overlayRadius: 16,
-                                ),
-                              ),
-                              child: Slider(
-                                min: 0,
-                                max: maxMs,
-                                value: positionMs,
-                                onChanged: (value) => controller.seek(
-                                  Duration(milliseconds: value.toInt()),
-                                ),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    _fmt(playback.position),
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                  Text(
-                                    _fmt(playback.duration),
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                        const _NowPlayingProgress(),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -253,45 +188,7 @@ class NowPlayingScreen extends ConsumerWidget {
                               color: theme.colorScheme.onSurface,
                             ),
                             const SizedBox(width: 30),
-                            Container(
-                              width: 76,
-                              height: 76,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    V27Palette.violet,
-                                    Color(0xFF6841D9),
-                                  ],
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: V27Palette.violet.withValues(
-                                      alpha: 0.32,
-                                    ),
-                                    blurRadius: 22,
-                                    offset: const Offset(0, 8),
-                                  ),
-                                ],
-                              ),
-                              child: Material(
-                                color: Colors.transparent,
-                                shape: const CircleBorder(),
-                                child: InkWell(
-                                  customBorder: const CircleBorder(),
-                                  onTap: controller.togglePlayPause,
-                                  child: Icon(
-                                    playback.isPlaying
-                                        ? Icons.pause_rounded
-                                        : Icons.play_arrow_rounded,
-                                    size: 43,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ),
+                            const _NowPlayingPlayButton(),
                             const SizedBox(width: 30),
                             IconButton(
                               tooltip: 'Next track',
@@ -308,6 +205,125 @@ class NowPlayingScreen extends ConsumerWidget {
                   );
                 },
               ),
+      ),
+    );
+  }
+}
+
+
+class _NowPlayingProgress extends ConsumerWidget {
+  const _NowPlayingProgress();
+
+  String _fmt(Duration duration) {
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return hours > 0
+        ? '${hours.toString().padLeft(2, '0')}:$minutes:$seconds'
+        : '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final playback = ref.watch(
+      playbackControllerProvider.select(
+        (state) => (state.position, state.duration),
+      ),
+    );
+    final controller = ref.read(playbackControllerProvider.notifier);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final durationMs = playback.$2.inMilliseconds;
+    final maxMs = durationMs > 0 ? durationMs.toDouble() : 1.0;
+    final positionMs = playback.$1.inMilliseconds
+        .clamp(0, durationMs > 0 ? durationMs : 0)
+        .toDouble();
+
+    return Column(
+      children: [
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 4,
+            activeTrackColor: theme.colorScheme.primary,
+            inactiveTrackColor: isDark
+                ? V27Palette.darkBorder
+                : V27Palette.lightBorder,
+            thumbColor: theme.colorScheme.primary,
+            overlayColor: theme.colorScheme.primary.withValues(alpha: 0.12),
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+          ),
+          child: Slider(
+            min: 0,
+            max: maxMs,
+            value: positionMs,
+            onChanged: (value) => controller.seek(
+              Duration(milliseconds: value.toInt()),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _fmt(playback.$1),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              Text(
+                _fmt(playback.$2),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NowPlayingPlayButton extends ConsumerWidget {
+  const _NowPlayingPlayButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isPlaying = ref.watch(
+      playbackControllerProvider.select((state) => state.isPlaying),
+    );
+    final controller = ref.read(playbackControllerProvider.notifier);
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: 76,
+      height: 76,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: scheme.primary,
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withValues(alpha: 0.16),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: controller.togglePlayPause,
+          child: Icon(
+            isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+            size: 43,
+            color: scheme.onPrimary,
+          ),
+        ),
       ),
     );
   }
@@ -333,15 +349,15 @@ class _NothingPlayingState extends StatelessWidget {
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
                   colors: [
-                    V27Palette.violet.withValues(alpha: 0.2),
-                    V27Palette.cyan.withValues(alpha: 0.08),
+                    theme.colorScheme.primary.withValues(alpha: 0.18),
+                    theme.colorScheme.secondary.withValues(alpha: 0.08),
                   ],
                 ),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.music_off_rounded,
                 size: 48,
-                color: V27Palette.violet,
+                color: theme.colorScheme.primary,
               ),
             ),
             const SizedBox(height: 22),

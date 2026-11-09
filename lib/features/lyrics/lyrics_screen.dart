@@ -205,9 +205,13 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final playback = ref.watch(playbackControllerProvider);
+    final position = ref.watch(
+      playbackControllerProvider.select((state) => state.position),
+    );
 
-    final dark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
     return Scaffold(
       appBar: AppBar(
         title: const Text('LYRICS'),
@@ -216,7 +220,7 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
             padding: const EdgeInsets.only(right: 18),
             child: Center(
               child: Icon(Icons.music_note_rounded,
-                  color: V27Palette.violet, size: 23),
+                  color: colors.primary, size: 23),
             ),
           ),
         ],
@@ -225,8 +229,8 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
         future: _lyricsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(
-              child: CircularProgressIndicator(color: V27Palette.violet),
+            return Center(
+              child: CircularProgressIndicator(color: colors.primary),
             );
           }
           if (snapshot.hasError) {
@@ -297,10 +301,10 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
             return _PlainLyricsView(track: widget.track, text: result.plainText!);
           }
 
-          final activeIndex = LrcParser.activeLineIndex(lines, playback.position);
+          final activeIndex = LrcParser.activeLineIndex(lines, position);
           final maxWidth = (MediaQuery.sizeOf(context).width - 40).clamp(1.0, double.infinity);
           WidgetsBinding.instance.addPostFrameCallback(
-            (_) => _maybeAutoScroll(lines, playback.position, maxWidth),
+            (_) => _maybeAutoScroll(lines, position, maxWidth),
           );
 
           return Column(
@@ -315,7 +319,7 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
                     final isActive = index == activeIndex;
                     final distance = (index - activeIndex).abs();
                     return AnimatedContainer(
-                      duration: const Duration(milliseconds: 280),
+                      duration: V27Motion.standard,
                       curve: Curves.easeOut,
                       margin: const EdgeInsets.symmetric(vertical: 9),
                       padding: EdgeInsets.symmetric(
@@ -324,16 +328,16 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
                       ),
                       decoration: BoxDecoration(
                         color: isActive
-                            ? V27Palette.violet.withValues(alpha: dark ? 0.16 : 0.10)
+                            ? colors.primary.withValues(alpha: dark ? 0.16 : 0.10)
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(16),
                         border: isActive
                             ? Border.all(
-                                color: V27Palette.violet.withValues(alpha: 0.24))
+                                color: colors.primary.withValues(alpha: 0.24))
                             : null,
                       ),
                       child: AnimatedDefaultTextStyle(
-                        duration: const Duration(milliseconds: 280),
+                        duration: V27Motion.standard,
                         curve: Curves.easeOut,
                         textAlign: TextAlign.center,
                         style: TextStyle(
@@ -342,7 +346,7 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
                           fontWeight:
                               isActive ? FontWeight.w800 : FontWeight.w500,
                           color: isActive
-                              ? V27Palette.violet
+                              ? colors.primary
                               : Theme.of(context)
                                   .textTheme
                                   .bodyLarge
@@ -374,17 +378,20 @@ class _LyricsTrackHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.fromLTRB(18, 8, 18, 0),
       padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
         gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: Theme.of(context).brightness == Brightness.dark
-              ? const [Color(0xFF252044), Color(0xFF151D32)]
-              : const [Color(0xFFECE6FF), Color(0xFFF4F7FF)],
+              ? const [V27Palette.midnight, V27Palette.deepTeal]
+              : const [Color(0xFFE4F3F2), Color(0xFFE9EEF2)],
         ),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: V27Palette.violet.withValues(alpha: 0.2)),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
@@ -392,11 +399,11 @@ class _LyricsTrackHeader extends StatelessWidget {
             width: 45,
             height: 45,
             decoration: BoxDecoration(
-              color: V27Palette.violet.withValues(alpha: 0.16),
+              color: colors.primary.withValues(alpha: 0.16),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.music_note_rounded,
-                color: V27Palette.violet, size: 25),
+            child: Icon(Icons.music_note_rounded,
+                color: colors.primary, size: 25),
           ),
           const SizedBox(width: 13),
           Expanded(
@@ -425,7 +432,7 @@ class _LyricsTrackHeader extends StatelessWidget {
           Column(
             children: [
               Icon(Icons.graphic_eq_rounded,
-                  color: synced ? V27Palette.cyan : V27Palette.violet),
+                  color: synced ? colors.secondary : colors.primary),
               const SizedBox(height: 3),
               Text(
                 synced ? 'SYNCED' : 'LYRICS',
@@ -490,6 +497,7 @@ class _LyricsInfoPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(25),
@@ -505,10 +513,10 @@ class _LyricsInfoPanel extends StatelessWidget {
             width: 62,
             height: 62,
             decoration: BoxDecoration(
-              color: V27Palette.violet.withValues(alpha: 0.13),
+              color: colors.primary.withValues(alpha: 0.13),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Icon(icon, color: V27Palette.violet, size: 31),
+            child: Icon(icon, color: colors.primary, size: 31),
           ),
           const SizedBox(height: 17),
           Text(

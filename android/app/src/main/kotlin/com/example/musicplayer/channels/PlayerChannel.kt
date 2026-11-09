@@ -1064,7 +1064,7 @@ class PlayerChannel(
                         putExtra(Intent.EXTRA_SUBJECT, "Feedback about V27")
                         putExtra(
                             Intent.EXTRA_TEXT,
-                            "Feedback about V27 Offline Music Player:\n\n",
+                            "Feedback about V27 PULSE:\n\n",
                         )
                     }
                     context.startActivity(

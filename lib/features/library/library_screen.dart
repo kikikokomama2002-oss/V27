@@ -94,19 +94,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                         width: 34,
                         height: 34,
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
+                          gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              V27Palette.violet,
-                              V27Palette.cyan,
+                              theme.colorScheme.primary,
+                              theme.colorScheme.secondary,
                             ],
                           ),
                           borderRadius: BorderRadius.circular(11),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.graphic_eq_rounded,
-                          color: Colors.white,
+                          color: theme.colorScheme.onPrimary,
                           size: 21,
                         ),
                       ),
@@ -177,14 +177,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                   indicatorSize: TabBarIndicatorSize.tab,
                   indicatorPadding: const EdgeInsets.all(4),
                   indicator: BoxDecoration(
-                    color: V27Palette.violet.withValues(
+                    color: theme.colorScheme.primary.withValues(
                       alpha: isDark ? 0.22 : 0.12,
                     ),
                     borderRadius: BorderRadius.circular(13),
                   ),
-                  labelColor: isDark
-                      ? const Color(0xFFD9C9FF)
-                      : V27Palette.violet,
+                  labelColor: theme.colorScheme.primary,
                   unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
                   labelStyle: const TextStyle(
                     fontSize: 11,
@@ -475,15 +473,15 @@ class _GroupTileState extends State<_GroupTile> {
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              V27Palette.violet.withValues(alpha: 0.95),
-                              V27Palette.cyan.withValues(alpha: 0.75),
+                              theme.colorScheme.primary.withValues(alpha: 0.95),
+                              theme.colorScheme.secondary.withValues(alpha: 0.75),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(15),
                         ),
                         child: Icon(
                           widget.icon,
-                          color: Colors.white,
+                          color: theme.colorScheme.onPrimary,
                           size: 24,
                         ),
                       ),
@@ -521,7 +519,7 @@ class _GroupTileState extends State<_GroupTile> {
                           vertical: 7,
                         ),
                         decoration: BoxDecoration(
-                          color: V27Palette.violet.withValues(
+                          color: theme.colorScheme.primary.withValues(
                             alpha: isDark ? 0.18 : 0.09,
                           ),
                           borderRadius: BorderRadius.circular(11),
@@ -529,7 +527,7 @@ class _GroupTileState extends State<_GroupTile> {
                         child: Text(
                           '${widget.group.trackCount}',
                           style: theme.textTheme.labelMedium?.copyWith(
-                            color: V27Palette.violet,
+                            color: theme.colorScheme.primary,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
@@ -671,12 +669,12 @@ class _PagingCountError extends StatelessWidget {
                 width: 54,
                 height: 54,
                 decoration: BoxDecoration(
-                  color: V27Palette.violet.withValues(alpha: 0.12),
+                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.cloud_off_rounded,
-                  color: V27Palette.violet,
+                  color: theme.colorScheme.primary,
                   size: 27,
                 ),
               ),
@@ -744,7 +742,7 @@ class _PagingPageError extends StatelessWidget {
             icon: const Icon(Icons.refresh_rounded, size: 17),
             label: const Text('Couldn’t load more · Retry'),
             style: TextButton.styleFrom(
-              foregroundColor: V27Palette.violet,
+              foregroundColor: theme.colorScheme.primary,
               visualDensity: VisualDensity.compact,
             ),
           ),
@@ -761,15 +759,16 @@ class _LoadingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
       padding: EdgeInsets.symmetric(vertical: compact ? 8 : 20),
       child: Center(
         child: SizedBox(
           width: compact ? 18 : 22,
           height: compact ? 18 : 22,
-          child: const CircularProgressIndicator(
+          child: CircularProgressIndicator(
             strokeWidth: 2.2,
-            color: V27Palette.violet,
+            color: theme.colorScheme.primary,
           ),
         ),
       ),
@@ -802,7 +801,7 @@ class _TrackTile extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Material(
         color: isCurrent
-            ? V27Palette.violet.withValues(
+            ? theme.colorScheme.primary.withValues(
                 alpha: theme.brightness == Brightness.dark ? 0.13 : 0.07,
               )
             : theme.colorScheme.surface,
@@ -816,7 +815,7 @@ class _TrackTile extends ConsumerWidget {
               borderRadius: BorderRadius.circular(17),
               border: Border.all(
                 color: isCurrent
-                    ? V27Palette.violet.withValues(alpha: 0.42)
+                    ? theme.colorScheme.primary.withValues(alpha: 0.42)
                     : theme.dividerColor.withValues(alpha: 0.45),
                 width: isCurrent ? 1.1 : 0.65,
               ),
@@ -856,7 +855,7 @@ class _TrackTile extends ConsumerWidget {
                           width: 19,
                           height: 19,
                           decoration: BoxDecoration(
-                            color: V27Palette.violet,
+                            color: theme.colorScheme.primary,
                             borderRadius: BorderRadius.circular(7),
                             border: Border.all(
                               color: theme.colorScheme.surface,
@@ -867,7 +866,7 @@ class _TrackTile extends ConsumerWidget {
                             playback.isPlaying
                                 ? Icons.graphic_eq_rounded
                                 : Icons.pause_rounded,
-                            color: Colors.white,
+                            color: theme.colorScheme.onPrimary,
                             size: 12,
                           ),
                         ),
@@ -887,7 +886,7 @@ class _TrackTile extends ConsumerWidget {
                         style: theme.textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: isCurrent
-                              ? V27Palette.violet
+                              ? theme.colorScheme.primary
                               : theme.colorScheme.onSurface,
                         ),
                       ),
@@ -1079,18 +1078,18 @@ class _EmptyStateMessage extends StatelessWidget {
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [
-                          V27Palette.violet.withValues(alpha: 0.22),
-                          V27Palette.cyan.withValues(alpha: 0.10),
+                          theme.colorScheme.primary.withValues(alpha: 0.22),
+                          theme.colorScheme.secondary.withValues(alpha: 0.10),
                         ],
                       ),
                       border: Border.all(
-                        color: V27Palette.violet.withValues(alpha: 0.18),
+                        color: theme.colorScheme.primary.withValues(alpha: 0.18),
                       ),
                     ),
                     child: Icon(
                       icon,
                       size: 52,
-                      color: V27Palette.violet,
+                      color: theme.colorScheme.primary,
                     ),
                   ),
                   const SizedBox(height: 25),

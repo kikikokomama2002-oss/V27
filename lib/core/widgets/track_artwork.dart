@@ -118,7 +118,7 @@ class _TrackArtworkState extends ConsumerState<TrackArtwork> {
 
   Widget _placeholder(BuildContext context) {
     return Container(
-      color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
+      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
       alignment: Alignment.center,
       child: Icon(
         Icons.music_note,
