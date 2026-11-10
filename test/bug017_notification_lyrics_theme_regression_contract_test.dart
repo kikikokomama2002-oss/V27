@@ -30,7 +30,7 @@ void main() {
     final refreshMethod = playbackService.substring(refreshStart, refreshEnd);
     expect(refreshMethod, contains('sessionPlayer.refreshLogicalQueueState()'));
     expect(refreshMethod, contains('applyNotificationCommands()'));
-    expect(refreshMethod, contains('triggerNotificationUpdate()'));
+    expect(refreshMethod, isNot(contains('triggerNotificationUpdate()')));
   });
 
   test('logical Next is resolved from the current stable MediaItem identity', () {
