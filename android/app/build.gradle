@@ -97,7 +97,7 @@ flutter {
 }
 
 dependencies {
-    def media3_version = "1.4.1"
+    def media3_version = "1.6.1"
 
     implementation "androidx.media3:media3-exoplayer:$media3_version"
     implementation "androidx.media3:media3-session:$media3_version"

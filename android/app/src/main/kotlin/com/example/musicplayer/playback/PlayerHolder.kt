@@ -206,6 +206,7 @@ object PlayerHolder {
             mediaSessionTransportJob = null
             pendingMediaSessionTransportIntents.clear()
             oldTransportJob?.cancel()
+            PlaybackService.refreshNotificationCommands()
         }
 
         return accepted
@@ -215,19 +216,27 @@ object PlayerHolder {
     @Synchronized
     fun removeQueueItems(ids: Set<String>) {
         queueWindowController.removeItems(ids)
+        PlaybackService.refreshNotificationCommands()
     }
 
     @Synchronized
     fun refreshQueueAfterLibraryChange() {
         queueWindowController.refreshAfterLibraryChange()
+        PlaybackService.refreshNotificationCommands()
     }
 
     @Synchronized
     fun currentQueueContextId(): String? = queueWindowController.currentContextId()
 
+    /** Logical NEXT availability for the MediaSession notification. */
+    fun hasLogicalNext(): Boolean? = queueWindowController.hasLogicalNext()
+
     @Synchronized
-    fun clearQueueContextIfMatches(contextId: String): Boolean =
-        queueWindowController.clearContextIfMatches(contextId)
+    fun clearQueueContextIfMatches(contextId: String): Boolean {
+        val cleared = queueWindowController.clearContextIfMatches(contextId)
+        if (cleared) PlaybackService.refreshNotificationCommands()
+        return cleared
+    }
 
     /** Executes an immediate player/session operation while release is excluded. */
     @Synchronized

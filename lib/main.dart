@@ -25,9 +25,12 @@ class OfflineMusicPlayerApp extends ConsumerWidget {
     return MaterialApp(
       title: 'V27 PULSE',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.amoledDark(),
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
+      // ThemeData is applied in one frame. Avoid an AnimatedTheme tween
+      // over the full music-library subtree during a mode toggle.
+      themeAnimationDuration: Duration.zero,
       home: const _StartupGate(),
     );
   }

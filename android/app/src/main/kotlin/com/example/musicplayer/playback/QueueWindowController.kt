@@ -184,8 +184,10 @@ class QueueWindowController(private val scope: CoroutineScope) {
             maybeAdjustWindow()
         }
 
-        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) =
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             maybeAdjustWindow()
+            PlaybackService.refreshNotificationCommands()
+        }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_ENDED) {
@@ -232,6 +234,21 @@ class QueueWindowController(private val scope: CoroutineScope) {
     fun contains(identity: String): Boolean = loadedIds.contains(identity)
 
     fun currentContextId(): String? = contextId
+
+    /** Returns logical NEXT availability, or null when no query-backed queue is active. */
+    fun hasLogicalNext(): Boolean? = withMutationLock {
+        if (contextId == null) return@withMutationLock null
+        val p = player ?: return@withMutationLock false
+        // MediaSession may query available commands while ExoPlayer is
+        // processing a timeline/index transition. Resolve the current slot
+        // from the stable MediaItem identity instead of trusting the transient
+        // currentMediaItemIndex value; loadedIds uses the same mediaId key.
+        val currentMediaId = p.currentMediaItem?.mediaId
+            ?: return@withMutationLock false
+        val relativeIndex = loadedIds.indexOf(currentMediaId)
+        if (relativeIndex < 0) return@withMutationLock false
+        logicalIndexOf(relativeIndex) + 1 < totalCount
+    }
 
     /** Clears only [expectedContextId], never a newer queue context. */
     fun clearContextIfMatches(expectedContextId: String): Boolean {

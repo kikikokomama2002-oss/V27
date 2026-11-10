@@ -5,6 +5,8 @@ import android.content.Intent
 import com.example.musicplayer.MainActivity
 import android.os.Handler
 import android.os.Looper
+import androidx.media3.common.ForwardingSimpleBasePlayer
+import androidx.media3.common.SimpleBasePlayer
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -37,11 +39,41 @@ class PlaybackService : MediaSessionService() {
         @JvmStatic
         fun refreshNotificationCommands() {
             val service = activeService ?: return
-            mainHandler.post { service.applyNotificationCommands() }
+            mainHandler.post { service.refreshLogicalQueueState() }
         }
     }
 
     private lateinit var mediaSession: MediaSession
+    private inner class LogicalSessionPlayer(player: Player) :
+        ForwardingSimpleBasePlayer(player) {
+
+        override fun getState(): SimpleBasePlayer.State {
+            val state = super.getState()
+            val hasLogicalNext = PlayerHolder.hasLogicalNext() ?: return state
+            val commands = state.availableCommands.buildUpon()
+
+            if (hasLogicalNext) {
+                // Media3 1.6.1's DefaultMediaNotificationProvider creates the
+                // notification Next action only when one of these standard
+                // player commands is actually available to the controller.
+                commands.add(Player.COMMAND_SEEK_TO_NEXT)
+                commands.add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+            } else {
+                commands.remove(Player.COMMAND_SEEK_TO_NEXT)
+                commands.remove(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+            }
+
+            return state.buildUpon()
+                .setAvailableCommands(commands.build())
+                .build()
+        }
+
+        fun refreshLogicalQueueState() {
+            invalidateState()
+        }
+    }
+
+    private lateinit var sessionPlayer: LogicalSessionPlayer
 
     override fun onCreate() {
         super.onCreate()
@@ -73,6 +105,7 @@ class PlaybackService : MediaSessionService() {
             ) {
                 if (session.isMediaNotificationController(controller)) {
                     applyNotificationCommands()
+                    triggerNotificationUpdate()
                 }
             }
 
@@ -108,8 +141,19 @@ class PlaybackService : MediaSessionService() {
                 }
             }
         }
+        val sharedPlayer = PlayerHolder.player(this)
+        sessionPlayer = LogicalSessionPlayer(sharedPlayer)
+
+        // Re-apply notification commands after Media3 publishes the refreshed state.
+        sessionPlayer.addListener(object : Player.Listener {
+            override fun onAvailableCommandsChanged(availableCommands: Player.Commands) {
+                applyNotificationCommands(availableCommands)
+                triggerNotificationUpdate()
+            }
+        })
+
         mediaSession = synchronized(PlayerHolder) {
-            MediaSession.Builder(this, PlayerHolder.player(this))
+            MediaSession.Builder(this, sessionPlayer)
                 .setSessionActivity(
                     PendingIntent.getActivity(
                         this,
@@ -150,8 +194,21 @@ class PlaybackService : MediaSessionService() {
         super.onTaskRemoved(rootIntent)
     }
 
+    private fun refreshLogicalQueueState() {
+        if (!::sessionPlayer.isInitialized) return
+        // Recompute the logical NEXT command before refreshing the actual
+        // notification. Queue-window changes do not always mutate ExoPlayer's
+        // physical timeline, so relying only on its player listeners can leave
+        // the system notification displaying stale transport buttons.
+        sessionPlayer.refreshLogicalQueueState()
+        applyNotificationCommands()
+        triggerNotificationUpdate()
+    }
+
     @OptIn(UnstableApi::class)
-    private fun applyNotificationCommands() {
+    private fun applyNotificationCommands(
+        playerCommands: Player.Commands = sessionPlayer.availableCommands,
+    ) {
         if (!::mediaSession.isInitialized) return
         val notificationController = mediaSession.mediaNotificationControllerInfo ?: return
         val isConnected = mediaSession.connectedControllers.any {
@@ -159,7 +216,6 @@ class PlaybackService : MediaSessionService() {
         }
         if (!isConnected) return
 
-        val playerCommands = PlayerHolder.peek()?.availableCommands ?: return
         val effectiveCommands = if (PlayerHolder.isLockScreenControlsEnabled(this)) {
             playerCommands
         } else {

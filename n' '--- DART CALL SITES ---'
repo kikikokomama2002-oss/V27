@@ -1,0 +1,45 @@
+[1mdiff --git a/android/app/src/main/kotlin/com/example/musicplayer/playback/PlayerHolder.kt b/android/app/src/main/kotlin/com/example/musicplayer/playback/PlayerHolder.kt[m
+[1mindex 759f632..cef1d53 100644[m
+[1m--- a/android/app/src/main/kotlin/com/example/musicplayer/playback/PlayerHolder.kt[m
+[1m+++ b/android/app/src/main/kotlin/com/example/musicplayer/playback/PlayerHolder.kt[m
+[36m@@ -130,7 +130,8 @@[m [mobject PlayerHolder {[m
+         startIndex: Int,[m
+         window: List<Pair<Long, String>>,[m
+         windowStartIndex: Int,[m
+[31m-        startPositionMs: Long[m
+[32m+[m[32m        startPositionMs: Long,[m
+[32m+[m[32m        autoPlay: Boolean = true[m
+     ): Boolean {[m
+         player(context) // ensure created[m
+         return queueWindowController.setContext([m
+[36m@@ -143,6 +144,7 @@[m [mobject PlayerHolder {[m
+             window,[m
+             windowStartIndex,[m
+             startPositionMs,[m
+[32m+[m[32m            autoPlay,[m
+         )[m
+     }[m
+ [m
+[1mdiff --git a/android/app/src/main/kotlin/com/example/musicplayer/playback/QueueWindowController.kt b/android/app/src/main/kotlin/com/example/musicplayer/playback/QueueWindowController.kt[m
+[1mindex 8683460..a384061 100644[m
+[1m--- a/android/app/src/main/kotlin/com/example/musicplayer/playback/QueueWindowController.kt[m
+[1m+++ b/android/app/src/main/kotlin/com/example/musicplayer/playback/QueueWindowController.kt[m
+[36m@@ -296,7 +296,8 @@[m [mclass QueueWindowController(private val scope: CoroutineScope) {[m
+         startIndexGlobal: Int,[m
+         window: List<Pair<Long, String>>,[m
+         windowStartIndexGlobal: Int,[m
+[31m-        startPositionMs: Long[m
+[32m+[m[32m        startPositionMs: Long,[m
+[32m+[m[32m        autoPlay: Boolean = true[m
+     ): Boolean {[m
+         require(newQueueGeneration > 0) { "queue generation must be positive" }[m
+         require(newQueueGenerationEpoch.isNotBlank()) { "queue generation epoch must not be blank" }[m
+[36m@@ -377,7 +378,7 @@[m [mclass QueueWindowController(private val scope: CoroutineScope) {[m
+ [m
+             p.setMediaItems(mediaItems, relativeStart, startPositionMs)[m
+             p.prepare()[m
+[31m-            p.playWhenReady = true[m
+[32m+[m[32m            p.playWhenReady = autoPlay[m
+             return true[m
+         }[m
+     }[m

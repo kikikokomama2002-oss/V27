@@ -254,4 +254,10 @@ class AppTheme {
       ),
     );
   }
+
+
+  /// Reused immutable theme objects; rebuilding MaterialApp must not
+  /// regenerate both complete ThemeData trees on every mode switch.
+  static final ThemeData lightTheme = light();
+  static final ThemeData darkTheme = amoledDark();
 }

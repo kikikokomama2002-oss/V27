@@ -48,6 +48,16 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
   String? _folderAccessError;
   final List<double> _inactiveLineOffsets = <double>[0.0];
   double? _cachedGeometryWidth;
+  String? _cachedTextScaleSignature;
+  TextDirection? _cachedTextDirection;
+  Locale? _cachedLocale;
+
+  static const double _listHorizontalPadding = 24;
+  static const double _itemHorizontalPadding = 12;
+  static const double _itemVerticalMargin = 9;
+  static const double _inactiveVerticalPadding = 5;
+  static const double _activeVerticalPadding = 10;
+  static const double _listTopPadding = 30;
 
   @override
   void initState() {
@@ -121,6 +131,9 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
             ..clear()
             ..add(0.0);
           _cachedGeometryWidth = null;
+          _cachedTextScaleSignature = null;
+          _cachedTextDirection = null;
+          _cachedLocale = null;
           _lyricsFuture = _loadLyrics(forceRefresh: true);
         });
       } else {
@@ -143,13 +156,21 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
   double _lineHeight(
     String text,
     double maxWidth,
-    TextStyle style,
-  ) {
+    TextStyle style, {
+    required double verticalPadding,
+  }) {
     final painter = TextPainter(
       text: TextSpan(text: text, style: style),
-      textDirection: TextDirection.ltr,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
     )..layout(maxWidth: maxWidth);
-    return painter.height + 12.0;
+
+    // Match the actual ListView row: Text + vertical item padding +
+    // the AnimatedContainer's top/bottom margins.
+    return painter.height +
+        (verticalPadding * 2) +
+        (_itemVerticalMargin * 2);
   }
 
   double _offsetBefore(
@@ -158,42 +179,99 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
     double maxWidth,
     TextStyle style,
   ) {
-    if (_cachedGeometryWidth != maxWidth || _inactiveLineOffsets.length > lines.length + 1) {
+    if (_inactiveLineOffsets.length > lines.length + 1) {
       _inactiveLineOffsets
         ..clear()
         ..add(0.0);
-      _cachedGeometryWidth = maxWidth;
     }
     while (_inactiveLineOffsets.length <= index) {
       final i = _inactiveLineOffsets.length - 1;
       _inactiveLineOffsets.add(
-        _inactiveLineOffsets.last + _lineHeight(lines[i].text, maxWidth, style),
+        _inactiveLineOffsets.last +
+            _lineHeight(
+              lines[i].text,
+              maxWidth,
+              style,
+              verticalPadding: _inactiveVerticalPadding,
+            ),
       );
     }
     return _inactiveLineOffsets[index];
   }
 
-  void _maybeAutoScroll(List<LyricLine> lines, Duration position, double maxWidth) {
-    if (lines.isEmpty) return;
+  void _maybeAutoScroll(
+    List<LyricLine> lines,
+    Duration position,
+    double maxWidth,
+  ) {
+    if (!mounted || lines.isEmpty) return;
+
+    // TextScaler can be nonlinear, so cache both text sizes actually used
+    // by inactive and active lyric rows rather than only scale(1.0).
+    final textScaler = MediaQuery.textScalerOf(context);
+    final scaleSignature =
+        '${textScaler.scale(16).toStringAsPrecision(7)}|'
+        '${textScaler.scale(22).toStringAsPrecision(7)}';
+    final textDirection = Directionality.of(context);
+    final locale = Localizations.maybeLocaleOf(context);
+    final geometryChanged = _cachedGeometryWidth != maxWidth ||
+        _cachedTextScaleSignature != scaleSignature ||
+        _cachedTextDirection != textDirection ||
+        _cachedLocale != locale;
+    if (geometryChanged) {
+      _inactiveLineOffsets
+        ..clear()
+        ..add(0.0);
+      _cachedGeometryWidth = maxWidth;
+      _cachedTextScaleSignature = scaleSignature;
+      _cachedTextDirection = textDirection;
+      _cachedLocale = locale;
+      _lastActiveIndex = -1;
+    }
+
     final activeIndex = LrcParser.activeLineIndex(lines, position);
     if (activeIndex == _lastActiveIndex || activeIndex < 0) return;
-    _lastActiveIndex = activeIndex;
 
-    if (!_scrollController.hasClients) return;
+    // A post-frame callback may run before the ListView attaches its
+    // ScrollPosition. Do not mark this line as handled until a scroll can
+    // actually be issued, or the current lyric can be skipped permanently.
+    if (!_scrollController.hasClients ||
+        !_scrollController.position.hasContentDimensions) {
+      return;
+    }
+
     final theme = Theme.of(context);
-    final inactiveStyle = (theme.textTheme.bodyLarge ?? const TextStyle(fontSize: 16))
-        .copyWith(fontSize: 16, height: 1.0);
+    final inactiveStyle =
+        (theme.textTheme.bodyLarge ?? const TextStyle(fontSize: 16)).copyWith(
+      fontSize: 16,
+      height: 1.35,
+      fontWeight: FontWeight.w500,
+    );
     final before = _offsetBefore(lines, activeIndex, maxWidth, inactiveStyle);
-    final activeStyle = inactiveStyle.copyWith(fontSize: 20, fontWeight: FontWeight.w700);
-    final activeHeight = _lineHeight(lines[activeIndex].text, maxWidth, activeStyle);
-    const verticalPadding = 24.0;
-    final target = verticalPadding + before + activeHeight / 2 -
+    final activeStyle = inactiveStyle.copyWith(
+      fontSize: 22,
+      height: 1.35,
+      fontWeight: FontWeight.w800,
+    );
+    final activeHeight = _lineHeight(
+      lines[activeIndex].text,
+      maxWidth,
+      activeStyle,
+      verticalPadding: _activeVerticalPadding,
+    );
+    final target = _listTopPadding +
+        before +
+        activeHeight / 2 -
         (_scrollController.position.viewportDimension / 2);
+
     _scrollController.animateTo(
-      target.clamp(0.0, _scrollController.position.maxScrollExtent).toDouble(),
+      target
+          .clamp(0.0, _scrollController.position.maxScrollExtent)
+          .toDouble(),
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
     );
+    _lastActiveIndex = activeIndex;
   }
 
 
@@ -249,6 +327,9 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
                           ..clear()
                           ..add(0.0);
                         _cachedGeometryWidth = null;
+                        _cachedTextScaleSignature = null;
+                        _cachedTextDirection = null;
+                        _cachedLocale = null;
                         _lyricsFuture = _loadLyrics(forceRefresh: true);
                       });
                     },
@@ -302,61 +383,82 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
           }
 
           final activeIndex = LrcParser.activeLineIndex(lines, position);
-          final maxWidth = (MediaQuery.sizeOf(context).width - 40).clamp(1.0, double.infinity);
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => _maybeAutoScroll(lines, position, maxWidth),
-          );
 
           return Column(
             children: [
               _LyricsTrackHeader(track: widget.track, synced: true),
               Expanded(
-                child: ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.fromLTRB(24, 30, 24, 100),
-                  itemCount: lines.length,
-                  itemBuilder: (context, index) {
-                    final isActive = index == activeIndex;
-                    final distance = (index - activeIndex).abs();
-                    return AnimatedContainer(
-                      duration: V27Motion.standard,
-                      curve: Curves.easeOut,
-                      margin: const EdgeInsets.symmetric(vertical: 9),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: isActive ? 10 : 5,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Match the exact horizontal space available to each lyric
+                    // Text after the ListView and row paddings are applied.
+                    final maxWidth = (constraints.maxWidth -
+                            (_listHorizontalPadding * 2) -
+                            (_itemHorizontalPadding * 2))
+                        .clamp(1.0, double.infinity)
+                        .toDouble();
+                    WidgetsBinding.instance.addPostFrameCallback(
+                      (_) => _maybeAutoScroll(lines, position, maxWidth),
+                    );
+                    return ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.fromLTRB(
+                        _listHorizontalPadding,
+                        _listTopPadding,
+                        _listHorizontalPadding,
+                        100,
                       ),
-                      decoration: BoxDecoration(
-                        color: isActive
-                            ? colors.primary.withValues(alpha: dark ? 0.16 : 0.10)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(16),
-                        border: isActive
-                            ? Border.all(
-                                color: colors.primary.withValues(alpha: 0.24))
-                            : null,
-                      ),
-                      child: AnimatedDefaultTextStyle(
-                        duration: V27Motion.standard,
-                        curve: Curves.easeOut,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: isActive ? 22 : 16,
-                          height: 1.35,
-                          fontWeight:
-                              isActive ? FontWeight.w800 : FontWeight.w500,
-                          color: isActive
-                              ? colors.primary
-                              : Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge
-                                  ?.color
-                                  ?.withValues(
-                                    alpha: distance == 1 ? 0.58 : 0.32,
-                                  ),
-                        ),
-                        child: Text(lines[index].text),
-                      ),
+                      itemCount: lines.length,
+                      itemBuilder: (context, index) {
+                        final isActive = index == activeIndex;
+                        final distance = (index - activeIndex).abs();
+                        return AnimatedContainer(
+                          duration: V27Motion.standard,
+                          curve: Curves.easeOut,
+                          margin: const EdgeInsets.symmetric(
+                            vertical: _itemVerticalMargin,
+                          ),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: _itemHorizontalPadding,
+                            vertical: isActive
+                                ? _activeVerticalPadding
+                                : _inactiveVerticalPadding,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? colors.primary.withValues(
+                                    alpha: dark ? 0.16 : 0.10,
+                                  )
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(16),
+                            border: isActive
+                                ? Border.all(
+                                    color: colors.primary.withValues(
+                                      alpha: 0.24,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          child: AnimatedDefaultTextStyle(
+                            duration: V27Motion.standard,
+                            curve: Curves.easeOut,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: isActive ? 22 : 16,
+                              height: 1.35,
+                              fontWeight: isActive
+                                  ? FontWeight.w800
+                                  : FontWeight.w500,
+                              color: isActive
+                                  ? colors.primary
+                                  : theme.textTheme.bodyLarge?.color?.withValues(
+                                      alpha: distance == 1 ? 0.58 : 0.32,
+                                    ),
+                            ),
+                            child: Text(lines[index].text),
+                          ),
+                        );
+                      },
                     );
                   },
                 ),
