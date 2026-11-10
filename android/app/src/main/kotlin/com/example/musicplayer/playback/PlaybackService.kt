@@ -105,7 +105,7 @@ class PlaybackService : MediaSessionService() {
             ) {
                 if (session.isMediaNotificationController(controller)) {
                     applyNotificationCommands()
-                    triggerNotificationUpdate()
+
                 }
             }
 
@@ -148,7 +148,7 @@ class PlaybackService : MediaSessionService() {
         sessionPlayer.addListener(object : Player.Listener {
             override fun onAvailableCommandsChanged(availableCommands: Player.Commands) {
                 applyNotificationCommands(availableCommands)
-                triggerNotificationUpdate()
+
             }
         })
 
@@ -202,7 +202,7 @@ class PlaybackService : MediaSessionService() {
         // the system notification displaying stale transport buttons.
         sessionPlayer.refreshLogicalQueueState()
         applyNotificationCommands()
-        triggerNotificationUpdate()
+
     }
 
     @OptIn(UnstableApi::class)
