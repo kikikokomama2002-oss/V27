@@ -2212,6 +2212,19 @@ class LibraryRepository {
     return counts;
   }
 
+  /// Fetches one indexed representative track for a dashboard group artwork.
+  /// This intentionally does not sort the whole group by title: the caller
+  /// only needs one local artwork source, so the group-value index can answer
+  /// the query directly without materializing a page or scanning title order.
+  Future<Track?> firstTrackForGroup(GroupField field, String name) {
+    if (name.trim().isEmpty) return Future<Track?>.value(null);
+    return switch (field) {
+      GroupField.album => _isar.tracks.where().albumEqualTo(name).findFirst(),
+      GroupField.artist => _isar.tracks.where().artistEqualTo(name).findFirst(),
+      GroupField.folder => _isar.tracks.where().folderEqualTo(name).findFirst(),
+    };
+  }
+
   Future<List<Track>> tracksForGroupPage(
     GroupField field,
     String name, {

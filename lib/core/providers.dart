@@ -426,6 +426,64 @@ final groupTracksPagingProvider = StateNotifierProvider.autoDispose
   (ref, key) => GroupTracksPagingNotifier(ref, key),
 );
 
+/// One lightweight artwork/metadata preview for a dashboard album, artist, or
+/// folder card. Unlike the expanded-group pager, this fetches exactly one row
+/// and therefore does not materialize a 60-track page for a small preview.
+final groupPreviewTrackProvider =
+    FutureProvider.autoDispose.family<Track?, GroupKey>((ref, key) async {
+  ref.watch(libraryChangesProvider);
+  final repo = ref.watch(libraryRepositoryProvider);
+  if (repo == null) return null;
+
+  for (var attempt = 0; attempt < 3; attempt++) {
+    final generation = await repo.waitForStableSnapshot();
+    final track = await repo.firstTrackForGroup(key.field, key.name);
+    if (generation == repo.libraryGeneration && !repo.scanInProgress) {
+      return track;
+    }
+  }
+  throw const LibrarySnapshotUnstableException();
+});
+
+/// Small, unfiltered Home preview. It is intentionally independent of
+/// [searchQueryProvider], so a previous Tracks search never changes the Home
+/// dashboard. The result is capped at five rows and revalidated against the
+/// repository generation just like the paged library feeds.
+final dashboardQuickPicksProvider =
+    FutureProvider.autoDispose<List<Track>>((ref) async {
+  ref.watch(libraryChangesProvider);
+  final repo = ref.watch(libraryRepositoryProvider);
+  if (repo == null) return const <Track>[];
+
+  for (var attempt = 0; attempt < 3; attempt++) {
+    final generation = await repo.waitForStableSnapshot();
+    final tracks = await repo.tracksPage(offset: 0, limit: 5);
+    if (generation == repo.libraryGeneration && !repo.scanInProgress) {
+      repo.completeInitialLibraryRead();
+      return tracks;
+    }
+  }
+  throw const LibrarySnapshotUnstableException();
+});
+
+/// Unfiltered total for the Home shortcut card. This count remains stable
+/// regardless of the query currently entered in the Tracks tab.
+final libraryTrackCountProvider = FutureProvider.autoDispose<int>((ref) async {
+  ref.watch(libraryChangesProvider);
+  final repo = ref.watch(libraryRepositoryProvider);
+  if (repo == null) return 0;
+
+  for (var attempt = 0; attempt < 3; attempt++) {
+    final generation = await repo.waitForStableSnapshot();
+    final count = await repo.tracksCount();
+    if (generation == repo.libraryGeneration && !repo.scanInProgress) {
+      if (count == 0) repo.completeInitialLibraryRead();
+      return count;
+    }
+  }
+  throw const LibrarySnapshotUnstableException();
+});
+
 /// Drives the mini-player / now-playing screen: current queue, current
 /// track, and live playback state from the native side.
 final playbackControllerProvider =

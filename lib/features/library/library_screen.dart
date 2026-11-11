@@ -7,17 +7,17 @@ import '../../core/playlist_store.dart';
 import '../../core/widgets/playlist_name_dialog.dart';
 import '../../core/debouncer.dart';
 import '../../core/library_tab_settings.dart';
-
 import '../../core/widgets/track_artwork.dart';
 import '../../data/db/track.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../playback/queue_spec.dart';
 import '../player/mini_player.dart';
 import '../settings/settings_screen.dart';
+import 'library_dashboard.dart';
 
-/// Root library screen: Tracks / Albums / Artists / Folders tabs with a
-/// search field, minimal-tap access to the whole library. A persistent
-/// [MiniPlayer] sits above the tab content whenever something is loaded.
+/// Main library surface. The Home tab is a vertically-scrolling, local-data
+/// dashboard; the remaining tabs retain their existing windowed paging and
+/// queue semantics for full-library browsing.
 class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});
 
@@ -27,15 +27,17 @@ class LibraryScreen extends ConsumerStatefulWidget {
 
 class _LibraryScreenState extends ConsumerState<LibraryScreen>
     with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+  late final TabController _tabController;
   final List<LibraryTab> _visibleTabs = List<LibraryTab>.unmodifiable(LibraryTab.values);
   late final Debouncer _searchDebounce;
   late final FocusNode _searchFocusNode;
+  late final TextEditingController _searchController;
 
   @override
   void initState() {
     super.initState();
     _searchFocusNode = FocusNode();
+    _searchController = TextEditingController(text: ref.read(searchQueryProvider));
     _tabController = TabController(length: _visibleTabs.length, vsync: this)
       ..addListener(_handleTabChange);
     _searchDebounce = Debouncer(const Duration(milliseconds: 250));
@@ -48,20 +50,25 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     if (mounted) setState(() {});
   }
 
+  void _selectTab(LibraryTab tab) {
+    final index = _visibleTabs.indexOf(tab);
+    if (index >= 0) _tabController.animateTo(index);
+  }
+
   Future<void> _manualRescan() async {
     final repo = ref.read(libraryRepositoryProvider);
     if (repo == null) return;
     try {
       await repo.scanAndPersist(reconcileDeletions: true);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Library scan completed.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Library scan completed.')),
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Library scan failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Library scan failed: $e')),
+      );
     }
   }
 
@@ -69,6 +76,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   void dispose() {
     _searchDebounce.dispose();
     _searchFocusNode.dispose();
+    _searchController.dispose();
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     super.dispose();
@@ -77,137 +85,118 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final searchQuery = ref.watch(searchQueryProvider);
+    final isTracksTab = _visibleTabs[_tabController.index] == LibraryTab.tracks;
+    final hour = DateTime.now().hour;
+    final greeting = hour < 12
+        ? 'Good morning'
+        : hour < 17
+            ? 'Good afternoon'
+            : 'Good evening';
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 16, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.fromLTRB(19, 13, 12, 9),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              theme.colorScheme.primary,
-                              theme.colorScheme.secondary,
-                            ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          greeting,
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w800,
                           ),
-                          borderRadius: BorderRadius.circular(11),
                         ),
-                        child: Icon(
-                          Icons.graphic_eq_rounded,
-                          color: theme.colorScheme.onPrimary,
-                          size: 21,
+                        const SizedBox(height: 3),
+                        Text(
+                          'Your music',
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -1.1,
+                            height: 1.04,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'V27 PULSE',
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 2.1,
+                        const SizedBox(height: 5),
+                        Text(
+                          'V27 PULSE  ·  OFFLINE LIBRARY',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.0,
+                          ),
                         ),
-                      ),
-                      const Spacer(),
-                      IconButton.filledTonal(
-                        tooltip: 'Rescan library',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: _manualRescan,
-                        icon: const Icon(Icons.refresh_rounded, size: 20),
-                      ),
-                      const SizedBox(width: 7),
-                      IconButton.filledTonal(
-                        tooltip: 'Settings',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const SettingsScreen(),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.tune_rounded, size: 20),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 19),
-                  Text(
-                    'Your Library',
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.8,
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Your music, all in one place.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                  IconButton.filledTonal(
+                    tooltip: 'Search tracks',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      _selectTab(LibraryTab.tracks);
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) _searchFocusNode.requestFocus();
+                      });
+                    },
+                    icon: const Icon(Icons.search_rounded, size: 20),
+                  ),
+                  const SizedBox(width: 3),
+                  IconButton.filledTonal(
+                    tooltip: 'Rescan library',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _manualRescan,
+                    icon: const Icon(Icons.refresh_rounded, size: 20),
+                  ),
+                  const SizedBox(width: 3),
+                  IconButton.filledTonal(
+                    tooltip: 'Settings',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const SettingsScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.tune_rounded, size: 20),
                   ),
                 ],
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? V27Palette.darkSurface
-                      : theme.colorScheme.surface,
-                  borderRadius: BorderRadius.circular(17),
-                  border: Border.all(
-                    color: theme.dividerColor.withValues(alpha: 0.65),
+              padding: const EdgeInsets.only(bottom: 5),
+              child: TabBar(
+                controller: _tabController,
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                dividerColor: Colors.transparent,
+                indicatorSize: TabBarIndicatorSize.tab,
+                indicatorPadding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
+                indicator: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(
+                    alpha: theme.brightness == Brightness.dark ? 0.24 : 0.13,
                   ),
+                  borderRadius: BorderRadius.circular(22),
                 ),
-                child: TabBar(
-                  controller: _tabController,
-                  isScrollable: false,
-                  dividerColor: Colors.transparent,
-                  indicatorSize: TabBarIndicatorSize.tab,
-                  indicatorPadding: const EdgeInsets.all(4),
-                  indicator: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(
-                      alpha: isDark ? 0.22 : 0.12,
-                    ),
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                  labelColor: theme.colorScheme.primary,
-                  unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
-                  labelStyle: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  unselectedLabelStyle: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  tabs: _visibleTabs
-                      .map(
-                        (tab) => Tab(
-                          height: 58,
-                          icon: Icon(tab.icon, size: 19),
-                          text: tab.label,
-                        ),
-                      )
-                      .toList(growable: false),
-                ),
+                labelColor: theme.colorScheme.primary,
+                unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
+                labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                unselectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                labelPadding: const EdgeInsets.symmetric(horizontal: 13),
+                tabs: _visibleTabs.map((tab) => Tab(text: tab.label)).toList(growable: false),
               ),
             ),
-            if (_visibleTabs[_tabController.index] == LibraryTab.tracks)
+            if (isTracksTab)
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
+                padding: const EdgeInsets.fromLTRB(16, 7, 16, 10),
                 child: TextField(
+                  controller: _searchController,
                   focusNode: _searchFocusNode,
                   textInputAction: TextInputAction.search,
                   onSubmitted: (_) => _searchFocusNode.unfocus(),
@@ -217,36 +206,30 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                   decoration: InputDecoration(
                     hintText: 'Search your tracks…',
                     prefixIcon: const Icon(Icons.search_rounded),
-                    suffixIcon: const Icon(
-                      Icons.tune_rounded,
-                      size: 19,
-                    ),
+                    suffixIcon: searchQuery.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Clear search',
+                            onPressed: () {
+                              _searchDebounce.dispose();
+                              _searchController.clear();
+                              ref.read(searchQueryProvider.notifier).state = '';
+                            },
+                            icon: const Icon(Icons.close_rounded),
+                          ),
                     counterText: '',
                     filled: true,
-                    fillColor: isDark
-                        ? V27Palette.darkSurface
-                        : theme.colorScheme.surface,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 15,
-                    ),
+                    fillColor: theme.colorScheme.surface,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(17),
-                      borderSide: BorderSide(
-                        color: theme.dividerColor.withValues(alpha: 0.7),
-                      ),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(17),
-                      borderSide: BorderSide(
-                        color: theme.dividerColor.withValues(alpha: 0.7),
-                      ),
+                      borderSide: BorderSide.none,
                     ),
                   ),
-                  onChanged: (v) {
+                  onChanged: (value) {
                     _searchDebounce.call(() {
                       if (!mounted) return;
-                      ref.read(searchQueryProvider.notifier).state = v;
+                      ref.read(searchQueryProvider.notifier).state = value;
                     });
                   },
                 ),
@@ -266,19 +249,21 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
   Widget _pageForTab(LibraryTab tab) {
     return switch (tab) {
+      LibraryTab.home => LibraryDashboard(onSelectTab: _selectTab),
       LibraryTab.tracks => const _TracksTab(),
       LibraryTab.albums => const _GroupedTab(
-        groupBy: GroupField.album,
-        icon: Icons.album_outlined,
-      ),
+          groupBy: GroupField.album,
+          icon: Icons.album_outlined,
+        ),
       LibraryTab.artists => const _GroupedTab(
-        groupBy: GroupField.artist,
-        icon: Icons.person_outline,
-      ),
+          groupBy: GroupField.artist,
+          icon: Icons.person_outline,
+        ),
       LibraryTab.folders => const _GroupedTab(
-        groupBy: GroupField.folder,
-        icon: Icons.folder_outlined,
-      ),
+          groupBy: GroupField.folder,
+          icon: Icons.folder_outlined,
+        ),
+      LibraryTab.playlists => const LibraryPlaylistsTab(),
     };
   }
 }
