@@ -27,7 +27,7 @@ class LibraryScreen extends ConsumerStatefulWidget {
 }
 
 class _LibraryScreenState extends ConsumerState<LibraryScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final TabController _tabController;
   final List<LibraryTab> _visibleTabs = List<LibraryTab>.unmodifiable(LibraryTab.values);
   late final Debouncer _searchDebounce;
