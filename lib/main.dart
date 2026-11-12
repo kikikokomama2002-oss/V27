@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'dart:async';
 import 'package:permission_handler/permission_handler.dart';
 import 'core/permissions.dart';
 import 'core/providers.dart';
 import 'core/theme.dart';
 import 'core/theme_mode_provider.dart';
+import 'core/accent_color_provider.dart';
+import 'core/localization.dart';
 import 'features/library/library_screen.dart';
 
 // MobileAds.instance.initialize() removed for the pure offline MVP
@@ -22,11 +25,21 @@ class OfflineMusicPlayerApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
+    final accent = accentOptionFor(ref.watch(accentColorProvider));
+    final languageCode = ref.watch(languageProvider);
     return MaterialApp(
       title: 'V27 PULSE',
+      locale: localeForLanguage(languageCode),
+      supportedLocales: v27Languages.map((item) => item.locale).toList(growable: false),
+      localizationsDelegates: const [
+        V27StringsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
+      theme: AppTheme.light(accent: accent.lightColor),
+      darkTheme: AppTheme.amoledDark(accent: accent.darkColor),
       themeMode: themeMode,
       // ThemeData is applied in one frame. Avoid an AnimatedTheme tween
       // over the full music-library subtree during a mode toggle.

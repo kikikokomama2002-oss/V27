@@ -6,16 +6,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/track_artwork.dart';
+import '../../core/widgets/sleep_timer_sheet.dart';
+import '../../core/localization.dart';
 import '../equalizer/equalizer_screen.dart';
+import '../lyrics/lrc_parser.dart';
 import '../lyrics/lyrics_screen.dart';
+import '../../data/db/track.dart';
 
 /// Full-screen V27 PULSE playback experience.
-class NowPlayingScreen extends ConsumerWidget {
-  const NowPlayingScreen({super.key});
+enum _NowPlayingView { cover, lyrics, queue }
 
+class NowPlayingScreen extends ConsumerStatefulWidget {
+  const NowPlayingScreen({super.key});
+  @override
+  ConsumerState<NowPlayingScreen> createState() => _NowPlayingScreenState();
+}
+
+class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
+  _NowPlayingView _view = _NowPlayingView.cover;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final ref = this.ref;
+    final strings = V27Strings.of(context);
     final track = ref.watch(currentTrackProvider);
     final controller = ref.read(playbackControllerProvider.notifier);
     final theme = Theme.of(context);
@@ -28,7 +41,7 @@ class NowPlayingScreen extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'NOW PLAYING',
+              strings.text('now_playing'),
               style: theme.textTheme.labelLarge?.copyWith(
                 fontWeight: FontWeight.w800,
                 letterSpacing: 1.8,
@@ -48,21 +61,10 @@ class NowPlayingScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.equalizer_rounded),
-            tooltip: 'Equalizer',
+            tooltip: V27Strings.of(context).text('equalizer'),
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const EqualizerScreen()),
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.lyrics_rounded),
-            tooltip: 'Lyrics',
-            onPressed: track == null
-                ? null
-                : () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => LyricsScreen(track: track),
-                      ),
-                    ),
           ),
           const SizedBox(width: 4),
         ],
@@ -94,8 +96,8 @@ class NowPlayingScreen extends ConsumerWidget {
                   return Padding(
                     padding: const EdgeInsets.fromLTRB(24, 12, 24, 18),
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
+                      mainAxisAlignment: _view == _NowPlayingView.cover ? MainAxisAlignment.spaceEvenly : MainAxisAlignment.start,
+                      children: _view == _NowPlayingView.cover ? [
                         const SizedBox(height: 2),
                         Container(
                           width: artworkSize,
@@ -187,9 +189,9 @@ class NowPlayingScreen extends ConsumerWidget {
                               iconSize: 38,
                               color: theme.colorScheme.onSurface,
                             ),
-                            const SizedBox(width: 30),
+                            const SizedBox(width: 24),
                             const _NowPlayingPlayButton(),
-                            const SizedBox(width: 30),
+                            const SizedBox(width: 24),
                             IconButton(
                               tooltip: 'Next track',
                               onPressed: controller.next,
@@ -197,9 +199,46 @@ class NowPlayingScreen extends ConsumerWidget {
                               iconSize: 38,
                               color: theme.colorScheme.onSurface,
                             ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              tooltip: strings.text('sleep_timer'),
+                              onPressed: () => showSleepTimerSheet(context),
+                              icon: const Icon(Icons.bedtime_outlined),
+                              color: theme.colorScheme.primary,
+                            ),
                           ],
                         ),
+                        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          IconButton(tooltip: strings.text('lyrics'), onPressed: () => setState(() => _view = _NowPlayingView.lyrics), icon: const Icon(Icons.lyrics_rounded)),
+                          IconButton(tooltip: strings.text('whats_next'), onPressed: () => setState(() => _view = _NowPlayingView.queue), icon: const Icon(Icons.queue_music_rounded)),
+                        ]),
                         const SizedBox(height: 2),
+                      ] : [
+                        const SizedBox(height: 4),
+                        GestureDetector(
+                          onTap: () => setState(() => _view = _NowPlayingView.cover),
+                          child: Row(children: [
+                            ClipRRect(borderRadius: BorderRadius.circular(12), child: TrackArtwork(contentUri: track.contentUri, version: Object.hash(track.contentUri, track.dateModified, track.title, track.artist), size: 64, artSize: 128)),
+                            const SizedBox(width: 12),
+                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                              Text(track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                            ])),
+                            IconButton(onPressed: () => setState(() => _view = _NowPlayingView.cover), icon: const Icon(Icons.close_rounded)),
+                          ]),
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(child: _view == _NowPlayingView.lyrics ? _InlineLyricsPanel(track: track) : _UpcomingQueuePanel()),
+                        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          IconButton(onPressed: controller.previous, icon: const Icon(Icons.skip_previous_rounded), iconSize: 30),
+                          const _NowPlayingPlayButton(),
+                          IconButton(onPressed: controller.next, icon: const Icon(Icons.skip_next_rounded), iconSize: 30),
+                          IconButton(tooltip: strings.text('sleep_timer'), onPressed: () => showSleepTimerSheet(context), icon: const Icon(Icons.bedtime_outlined)),
+                        ]),
+                        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          IconButton(tooltip: strings.text('lyrics'), onPressed: () => setState(() => _view = _view == _NowPlayingView.lyrics ? _NowPlayingView.cover : _NowPlayingView.lyrics), icon: const Icon(Icons.lyrics_rounded)),
+                          IconButton(tooltip: strings.text('whats_next'), onPressed: () => setState(() => _view = _view == _NowPlayingView.queue ? _NowPlayingView.cover : _NowPlayingView.queue), icon: const Icon(Icons.queue_music_rounded)),
+                        ]),
                       ],
                     ),
                   );
@@ -210,6 +249,120 @@ class NowPlayingScreen extends ConsumerWidget {
   }
 }
 
+
+class _InlineLyricsPanel extends ConsumerStatefulWidget {
+  const _InlineLyricsPanel({required this.track});
+  final Track track;
+  @override
+  ConsumerState<_InlineLyricsPanel> createState() => _InlineLyricsPanelState();
+}
+
+class _InlineLyricsPanelState extends ConsumerState<_InlineLyricsPanel> {
+  late Future<String?> _lyrics;
+  final ScrollController _scroll = ScrollController();
+  int _lastIndex = -1;
+  @override
+  void initState() { super.initState(); _lyrics = _load(); }
+  Future<String?> _load() async {
+    final repo = ref.read(libraryRepositoryProvider);
+    return repo?.ensureLyrics(widget.track);
+  }
+  @override
+  void didUpdateWidget(covariant _InlineLyricsPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.track.contentUri != widget.track.contentUri) {
+      _lastIndex = -1;
+      _lyrics = _load();
+    }
+  }
+  @override
+  void dispose() { _scroll.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) {
+    final position = ref.watch(playbackControllerProvider.select((s) => s.position));
+    return FutureBuilder<String?>(future: _lyrics, builder: (context, snapshot) {
+      if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+      if (snapshot.hasError) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(V27Strings.of(context).text('could_not_load_lyrics')), TextButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => LyricsScreen(track: widget.track))), child: Text(V27Strings.of(context).text('open_lyrics_tools')))]));
+      final raw = snapshot.data?.trim() ?? '';
+      if (raw.isEmpty) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(V27Strings.of(context).text('no_lyrics_found'), style: Theme.of(context).textTheme.bodyLarge), TextButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => LyricsScreen(track: widget.track))), child: Text(V27Strings.of(context).text('open_lyrics_tools')))]));
+      final lines = LrcParser.parse(raw);
+      if (lines.isEmpty) return SingleChildScrollView(padding: const EdgeInsets.all(16), child: Text(raw, textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium?.copyWith(height: 1.7)));
+      final active = LrcParser.activeLineIndex(lines, position);
+      if (active != _lastIndex) {
+        _lastIndex = active;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_scroll.hasClients || !mounted) return;
+          final target = (active * 58.0).clamp(0.0, _scroll.position.maxScrollExtent).toDouble();
+          _scroll.animateTo(target, duration: const Duration(milliseconds: 280), curve: Curves.easeOut);
+        });
+      }
+      return ListView.builder(
+        controller: _scroll,
+        itemCount: lines.length,
+        itemExtent: 58,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        itemBuilder: (context, index) {
+          final selected = index == active;
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text(
+                lines[index].text,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: selected ? 20 : 15,
+                  height: 1.25,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                  color: selected
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: .65),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    });
+  }
+}
+
+class _UpcomingQueuePanel extends ConsumerWidget {
+  const _UpcomingQueuePanel();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final identity = ref.watch(playbackControllerProvider.select((s) => (s.currentTrackId, s.currentTrackVolume)));
+    return FutureBuilder<List<Track>>(
+      key: ValueKey(identity),
+      future: ref.read(playbackControllerProvider.notifier).loadUpcomingQueueTracks(limit: 40),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+        final tracks = snapshot.data ?? const <Track>[];
+        if (tracks.isEmpty) return Center(child: Text(V27Strings.of(context).text('no_upcoming_tracks'), style: Theme.of(context).textTheme.bodyLarge));
+        return ListView.builder(itemCount: tracks.length, itemBuilder: (context, index) {
+          final track = tracks[index];
+          return ListTile(
+            dense: true,
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: TrackArtwork(
+                contentUri: track.contentUri,
+                version: Object.hash(track.contentUri, track.dateModified, track.title, track.artist),
+                size: 44,
+                artSize: 96,
+              ),
+            ),
+            title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+            subtitle: Text(track.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
+            onTap: () => ref.read(playbackControllerProvider.notifier)
+                .playTrackFromActiveQueue(track),
+          );
+        });
+      },
+    );
+  }
+}
 
 class _NowPlayingProgress extends ConsumerWidget {
   const _NowPlayingProgress();

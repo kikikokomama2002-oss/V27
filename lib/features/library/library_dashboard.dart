@@ -10,6 +10,7 @@ import '../../core/widgets/track_artwork.dart';
 import '../../data/db/track.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../playback/queue_spec.dart';
+import '../player/mini_player.dart';
 import '../../core/library_tab_settings.dart';
 
 /// Resolves only the first available local track for a playlist cover. This
@@ -53,13 +54,51 @@ final playlistPreviewTrackProvider =
   throw const LibrarySnapshotUnstableException();
 });
 
+/// Resolves one playlist row at a time. The detail page uses a lazy ListView,
+/// so a very large playlist does not materialize every Track in memory.
+final playlistTrackAtProvider = FutureProvider.autoDispose.family<Track?, ({
+  String playlistId,
+  int index,
+})>((ref, key) async {
+  ref.watch(libraryChangesProvider);
+  final state = ref.watch(playlistStoreProvider);
+  UserPlaylist? playlist;
+  for (final item in state.playlists) {
+    if (item.id == key.playlistId) {
+      playlist = item;
+      break;
+    }
+  }
+  if (playlist == null || key.index < 0 || key.index >= playlist.songs.length) {
+    return null;
+  }
+  final repo = ref.watch(libraryRepositoryProvider);
+  if (repo == null) return null;
+  final identity = playlist.songs[key.index];
+  for (var attempt = 0; attempt < 3; attempt++) {
+    final generation = await repo.waitForStableSnapshot();
+    final tracks = await repo.tracksForMediaStoreIdentities([
+      (volume: identity.volume, id: identity.mediaStoreId),
+    ]);
+    if (generation == repo.libraryGeneration && !repo.scanInProgress) {
+      return tracks.isEmpty ? null : tracks.first;
+    }
+  }
+  throw const LibrarySnapshotUnstableException();
+});
+
 /// Offline-first dashboard inspired by music-library home screens. Every
 /// section is populated from the local Isar library or local playlists; no
 /// remote recommendations or community content is implied.
 class LibraryDashboard extends ConsumerWidget {
-  const LibraryDashboard({super.key, required this.onSelectTab});
+  const LibraryDashboard({
+    super.key,
+    required this.onSelectTab,
+    required this.onTrackAction,
+  });
 
   final ValueChanged<LibraryTab> onSelectTab;
+  final void Function(BuildContext context, Track track, String action) onTrackAction;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -95,6 +134,7 @@ class LibraryDashboard extends ConsumerWidget {
         SliverToBoxAdapter(
           child: _QuickPicksSection(
             onSelectAll: () => onSelectTab(LibraryTab.tracks),
+            onTrackAction: onTrackAction,
           ),
         ),
         SliverToBoxAdapter(
@@ -315,9 +355,10 @@ class _ShortcutCard extends StatelessWidget {
 }
 
 class _QuickPicksSection extends ConsumerWidget {
-  const _QuickPicksSection({required this.onSelectAll});
+  const _QuickPicksSection({required this.onSelectAll, required this.onTrackAction});
 
   final VoidCallback onSelectAll;
+  final void Function(BuildContext context, Track track, String action) onTrackAction;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -352,7 +393,7 @@ class _QuickPicksSection extends ConsumerWidget {
                 ),
               ],
             ),
-            data: (tracks) => tracks.isEmpty
+            data: (picks) => picks.isEmpty
                 ? Padding(
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     child: Text(
@@ -364,8 +405,8 @@ class _QuickPicksSection extends ConsumerWidget {
                   )
                 : Column(
                     children: [
-                      for (var index = 0; index < tracks.length; index++)
-                        _QuickPickRow(index: index, track: tracks[index]),
+                      for (var index = 0; index < picks.length; index++)
+                        _QuickPickRow(pick: picks[index], onTrackAction: onTrackAction),
                     ],
                   ),
           ),
@@ -373,6 +414,22 @@ class _QuickPicksSection extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _DashboardTrackMenuLabel extends StatelessWidget {
+  const _DashboardTrackMenuLabel({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Icon(icon, size: 20),
+          const SizedBox(width: 10),
+          Text(label),
+        ],
+      );
 }
 
 class _QuickPickLoadingRow extends StatelessWidget {
@@ -411,10 +468,12 @@ class _QuickPickLoadingRow extends StatelessWidget {
 }
 
 class _QuickPickRow extends ConsumerWidget {
-  const _QuickPickRow({required this.index, required this.track});
+  const _QuickPickRow({required this.pick, required this.onTrackAction});
 
-  final int index;
-  final Track track;
+  final DashboardQuickPick pick;
+  final void Function(BuildContext context, Track track, String action) onTrackAction;
+
+  Track get track => pick.track;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -439,7 +498,7 @@ class _QuickPickRow extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(11),
                 onTap: () => ref.read(playbackControllerProvider.notifier).playQueue(
                   const AllTracksQueueSpec(),
-                  startIndex: index,
+                  startIndex: pick.queueIndex,
                   startVolume: track.mediaStoreVolume,
                   startMediaStoreId: track.mediaStoreId,
                 ),
@@ -489,19 +548,37 @@ class _QuickPickRow extends ConsumerWidget {
             PopupMenuButton<String>(
               tooltip: 'Track options',
               icon: Icon(Icons.more_vert_rounded, color: theme.colorScheme.onSurfaceVariant),
-              onSelected: (value) {
-                if (value == 'playlist') _addTrackToPlaylist(context, ref, track);
-              },
-              itemBuilder: (_) => const [
+              onSelected: (value) => onTrackAction(context, track, value),
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'add_to_playlist',
+                  child: _DashboardTrackMenuLabel(icon: Icons.playlist_add_rounded, label: 'Add to playlist'),
+                ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: _DashboardTrackMenuLabel(icon: Icons.delete_outline_rounded, label: 'Delete'),
+                ),
+                const PopupMenuItem(
+                  value: 'share',
+                  child: _DashboardTrackMenuLabel(icon: Icons.share_outlined, label: 'Share'),
+                ),
+                const PopupMenuItem(
+                  value: 'details',
+                  child: _DashboardTrackMenuLabel(icon: Icons.info_outline_rounded, label: 'Track details'),
+                ),
                 PopupMenuItem(
-                  value: 'playlist',
-                  child: Row(
-                    children: [
-                      Icon(Icons.playlist_add_rounded, size: 20),
-                      SizedBox(width: 10),
-                      Text('Add to playlist'),
-                    ],
-                  ),
+                  value: 'album',
+                  enabled: track.album.trim().isNotEmpty,
+                  child: const _DashboardTrackMenuLabel(icon: Icons.album_outlined, label: 'Album'),
+                ),
+                PopupMenuItem(
+                  value: 'artist',
+                  enabled: track.artist.trim().isNotEmpty,
+                  child: const _DashboardTrackMenuLabel(icon: Icons.person_outline_rounded, label: 'Artist'),
+                ),
+                const PopupMenuItem(
+                  value: 'set_as',
+                  child: _DashboardTrackMenuLabel(icon: Icons.notifications_active_outlined, label: 'Set as'),
                 ),
               ],
             ),
@@ -769,7 +846,7 @@ class _DashboardPlaylistCard extends ConsumerWidget {
       width: 150,
       child: InkWell(
         borderRadius: BorderRadius.circular(15),
-        onTap: () => _playPlaylistFromUi(context, ref, playlist),
+        onTap: () => _openPlaylistDetail(context, playlist),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -833,6 +910,249 @@ class _DashboardPlaylistCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+class LibraryPlaylistDetailPage extends ConsumerWidget {
+  const LibraryPlaylistDetailPage({super.key, required this.playlistId});
+
+  final String playlistId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(playlistStoreProvider);
+    UserPlaylist? playlist;
+    for (final item in state.playlists) {
+      if (item.id == playlistId) {
+        playlist = item;
+        break;
+      }
+    }
+    final theme = Theme.of(context);
+    if (state.isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (playlist == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Playlist')),
+        body: const Center(child: Text('This playlist is no longer available.')),
+      );
+    }
+
+    final currentPlaylist = playlist;
+    final preview = ref.watch(playlistPreviewTrackProvider(currentPlaylist.id)).valueOrNull;
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 4, 18, 4),
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Back',
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    icon: const Icon(Icons.arrow_back_rounded),
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      'Your playlist',
+                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'Playlist options',
+                    onSelected: (value) async {
+                      await _handlePlaylistAction(context, ref, currentPlaylist, value);
+                      final stillExists = ref.read(playlistStoreProvider).playlists
+                          .any((item) => item.id == currentPlaylist.id);
+                      if (!stillExists && context.mounted) {
+                        Navigator.of(context).maybePop();
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'rename', child: Text('Rename')),
+                      PopupMenuItem(value: 'delete', child: Text('Delete')),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 124,
+                    height: 124,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(17),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: preview == null
+                        ? Icon(Icons.queue_music_rounded, size: 46, color: theme.colorScheme.primary)
+                        : TrackArtwork(
+                            contentUri: preview.contentUri,
+                            version: _artVersion(preview),
+                            artSize: 256,
+                            borderRadius: BorderRadius.zero,
+                          ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          currentPlaylist.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 7),
+                        Text(
+                          'Here it is, your playlist!',
+                          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          '${currentPlaylist.songs.length} ${currentPlaylist.songs.length == 1 ? 'song' : 'songs'}',
+                          style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: currentPlaylist.songs.isEmpty
+                          ? null
+                          : () => _playPlaylistFromUi(context, ref, currentPlaylist),
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: const Text('Play playlist'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.5)),
+            Expanded(
+              child: currentPlaylist.songs.isEmpty
+                  ? Center(
+                      child: Text(
+                        'Add tracks from your library to get started.',
+                        style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    )
+                  : ListView.builder(
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: currentPlaylist.songs.length,
+                      itemExtent: 72,
+                      itemBuilder: (context, index) => _PlaylistDetailTrackRow(
+                        playlist: currentPlaylist,
+                        index: index,
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: const MiniPlayer(),
+    );
+  }
+}
+
+class _PlaylistDetailTrackRow extends ConsumerWidget {
+  const _PlaylistDetailTrackRow({required this.playlist, required this.index});
+
+  final UserPlaylist playlist;
+  final int index;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final result = ref.watch(playlistTrackAtProvider((playlistId: playlist.id, index: index)));
+    return result.when(
+      loading: () => const _QuickPickLoadingRow(),
+      error: (_, __) => const ListTile(
+        leading: Icon(Icons.error_outline_rounded),
+        title: Text('Could not load this track'),
+      ),
+      data: (track) {
+        if (track == null) {
+          return ListTile(
+            leading: Icon(Icons.music_off_rounded, color: theme.colorScheme.onSurfaceVariant),
+            title: Text('Track unavailable', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+            subtitle: const Text('This file may have been removed from the device.'),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+          child: Material(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(14),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () => _playPlaylistFromUi(
+                context,
+                ref,
+                playlist,
+                startIndex: index,
+                startTrack: track,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(9),
+                      child: TrackArtwork(
+                        contentUri: track.contentUri,
+                        version: _artVersion(track),
+                        size: 48,
+                        artSize: 128,
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                    ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 3),
+                          Text(track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(_durationLabel(track.durationMs), style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+String _durationLabel(int durationMs) {
+  final duration = Duration(milliseconds: durationMs);
+  final hours = duration.inHours;
+  final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+  final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return hours > 0 ? '${hours.toString().padLeft(2, '0')}:$minutes:$seconds' : '$minutes:$seconds';
 }
 
 class LibraryPlaylistsTab extends ConsumerWidget {
@@ -922,7 +1242,7 @@ class _PlaylistListRow extends ConsumerWidget {
         borderRadius: BorderRadius.circular(17),
         child: InkWell(
           borderRadius: BorderRadius.circular(17),
-          onTap: () => _playPlaylistFromUi(context, ref, playlist),
+          onTap: () => _openPlaylistDetail(context, playlist),
           child: Padding(
             padding: const EdgeInsets.all(10),
             child: Row(
@@ -1053,7 +1373,21 @@ Future<void> _handlePlaylistAction(
   }
 }
 
-Future<void> _playPlaylistFromUi(BuildContext context, WidgetRef ref, UserPlaylist playlist) async {
+void _openPlaylistDetail(BuildContext context, UserPlaylist playlist) {
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => LibraryPlaylistDetailPage(playlistId: playlist.id),
+    ),
+  );
+}
+
+Future<void> _playPlaylistFromUi(
+  BuildContext context,
+  WidgetRef ref,
+  UserPlaylist playlist, {
+  int startIndex = 0,
+  Track? startTrack,
+}) async {
   final repo = ref.read(libraryRepositoryProvider);
   final playback = ref.read(playbackControllerProvider.notifier);
   if (repo == null) return;
@@ -1062,8 +1396,16 @@ Future<void> _playPlaylistFromUi(BuildContext context, WidgetRef ref, UserPlayli
   for (var attempt = 0; attempt < 3; attempt++) {
     final generation = await repo.waitForStableSnapshot();
     Track? firstAvailable;
+    if (startTrack != null) {
+      final resolved = await repo.tracksForMediaStoreIdentities([
+        (volume: startTrack.mediaStoreVolume, id: startTrack.mediaStoreId),
+      ]);
+      firstAvailable = resolved.isEmpty ? null : resolved.first;
+    }
 
-    for (var offset = 0; offset < playlist.songs.length; offset += chunkSize) {
+    for (var offset = startTrack == null ? 0 : playlist.songs.length;
+        offset < playlist.songs.length;
+        offset += chunkSize) {
       final end = math.min(offset + chunkSize, playlist.songs.length).toInt();
       final chunk = playlist.songs.sublist(offset, end);
       final resolved = await repo.tracksForMediaStoreIdentities(
@@ -1087,7 +1429,7 @@ Future<void> _playPlaylistFromUi(BuildContext context, WidgetRef ref, UserPlayli
 
     await playback.playQueue(
       PlaylistQueueSpec(playlist.id),
-      startIndex: 0,
+      startIndex: startIndex,
       startVolume: firstAvailable.mediaStoreVolume,
       startMediaStoreId: firstAvailable.mediaStoreId,
     );

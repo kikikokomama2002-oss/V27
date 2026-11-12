@@ -1,7 +1,9 @@
 package com.example.musicplayer
 
+import android.app.Activity
 import android.content.Intent
 import android.util.Log
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.musicplayer.channels.PLAYER_CHANNEL_NAME
 import com.example.musicplayer.channels.PLAYER_EVENT_CHANNEL_NAME
@@ -21,6 +23,7 @@ class MainActivity : FlutterFragmentActivity() {
         // ActivityResultRegistry restores the picker callback. The result is
         // cleared only when the Flutter engine itself is disposed.
         private var pendingFolderAccessResult: MethodChannel.Result? = null
+        private var pendingMediaDeleteResult: MethodChannel.Result? = null
     }
 
     // FIX #5: SAF directory-tree picker for the sidecar-.lrc fallback
@@ -48,6 +51,16 @@ class MainActivity : FlutterFragmentActivity() {
             }
         }
 
+    // MediaStore's delete request is a system-owned confirmation activity.
+    // Keep the pending channel result across Activity recreation, just like
+    // the SAF folder picker above.
+    private val confirmMediaStoreDelete =
+        registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { activityResult ->
+            val pending = pendingMediaDeleteResult
+            pendingMediaDeleteResult = null
+            pending?.success(activityResult.resultCode == Activity.RESULT_OK)
+        }
+
     private var playerChannel: PlayerChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -57,22 +70,37 @@ class MainActivity : FlutterFragmentActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             PLAYER_CHANNEL_NAME
         )
-        val channelHandler = PlayerChannel(applicationContext, playerMethodChannel) { result ->
-                // Only one folder-access request can be pending at a
-                // time — matches there being a single Equalizer/Lyrics
-                // screen visible at once.
-                if (pendingFolderAccessResult != null) {
-                    result.error("SAF_REQUEST_ALREADY_PENDING", "A folder access request is already pending", null)
+        val channelHandler = PlayerChannel(
+            applicationContext,
+            playerMethodChannel,
+            launchMediaStoreDeleteRequest = { intentSender, result ->
+                if (pendingMediaDeleteResult != null) {
+                    result.error("DELETE_REQUEST_ALREADY_PENDING", "A delete confirmation is already pending", null)
                 } else {
-                    pendingFolderAccessResult = result
+                    pendingMediaDeleteResult = result
                     try {
-                        openLyricsFolder.launch(null)
+                        confirmMediaStoreDelete.launch(IntentSenderRequest.Builder(intentSender).build())
                     } catch (e: Exception) {
-                        pendingFolderAccessResult = null
-                        result.error("SAF_LAUNCH_FAILED", e.message, null)
+                        pendingMediaDeleteResult = null
+                        result.error("DELETE_CONFIRMATION_LAUNCH_FAILED", e.message, null)
                     }
                 }
+            },
+        ) { result ->
+            // Only one folder-access request can be pending at a time —
+            // matches there being a single Equalizer/Lyrics screen visible.
+            if (pendingFolderAccessResult != null) {
+                result.error("SAF_REQUEST_ALREADY_PENDING", "A folder-access request is already pending", null)
+            } else {
+                pendingFolderAccessResult = result
+                try {
+                    openLyricsFolder.launch(null)
+                } catch (e: Exception) {
+                    pendingFolderAccessResult = null
+                    result.error("SAF_LAUNCH_FAILED", e.message, null)
+                }
             }
+        }
         playerChannel = channelHandler
         playerMethodChannel.setMethodCallHandler(channelHandler)
 
@@ -110,6 +138,8 @@ class MainActivity : FlutterFragmentActivity() {
         playerChannel = null
         pendingFolderAccessResult?.error("ENGINE_DISPOSED", "Flutter engine disposed", null)
         pendingFolderAccessResult = null
+        pendingMediaDeleteResult?.error("ENGINE_DISPOSED", "Flutter engine disposed", null)
+        pendingMediaDeleteResult = null
         super.cleanUpFlutterEngine(flutterEngine)
     }
 }

@@ -11,6 +11,7 @@
     <!-- Normal (auto-granted) permission for the Equalizer/BassBoost
          audio effects used by the Equalizer screen. -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <!-- INTERNET and com.android.vending.BILLING removed for the pure
          offline MVP release (no AdMob / IAP network calls). Restore
          both alongside the google_mobile_ads / in_app_purchase deps

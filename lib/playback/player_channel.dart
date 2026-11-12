@@ -556,6 +556,39 @@ class PlayerChannel {
       _method.invokeMethod('cancelEqualizerWait');
 
   // -------------------------------------------------------------------
+  // Track file actions
+  // -------------------------------------------------------------------
+
+  Future<bool> shareTrackFile({required String contentUri, required String title}) async {
+    final result = await _method.invokeMethod<bool>('shareTrackFile', {
+      'contentUri': contentUri,
+      'title': title,
+    });
+    return result ?? false;
+  }
+
+  /// Requests the Android MediaStore confirmation dialog before deleting a
+  /// song from shared storage. A false result means the user cancelled.
+  Future<bool> deleteMediaStoreTrack(String contentUri) async {
+    final result = await _method.invokeMethod<bool>('deleteMediaStoreTrack', {
+      'contentUri': contentUri,
+    });
+    return result ?? false;
+  }
+
+  /// Sets the selected local track as the system ringtone. On devices where
+  /// the special Write Settings access is missing, native Android opens the
+  /// system permission page and returns false; the user can tap Set as again
+  /// after granting access.
+  Future<bool> setTrackAsDefaultSound({required String contentUri, required String type}) async {
+    final result = await _method.invokeMethod<bool>('setTrackAsDefaultSound', {
+      'contentUri': contentUri,
+      'type': type,
+    });
+    return result ?? false;
+  }
+
+  // -------------------------------------------------------------------
   // Album artwork cancellation
   // -------------------------------------------------------------------
 

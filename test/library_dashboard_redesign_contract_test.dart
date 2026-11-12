@@ -34,7 +34,9 @@ void main() {
   });
 
   test('Dashboard queries are bounded and independent from Tracks search', () {
-    expect(providers, contains('tracksPage(offset: 0, limit: 5)'));
+    expect(providers, contains('math.Random.secure()'));
+    expect(providers, contains('repo.tracksPage(offset: offset, limit: 1)'));
+    expect(providers, contains('class DashboardQuickPick'));
     expect(providers, contains('firstTrackForGroup(key.field, key.name)'));
     expect(repository, contains('Future<Track?> firstTrackForGroup('));
     expect(repository, contains('.where().albumEqualTo(name).findFirst()'));

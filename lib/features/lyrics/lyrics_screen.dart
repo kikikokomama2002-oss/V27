@@ -489,8 +489,14 @@ class _LyricsTrackHeader extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: Theme.of(context).brightness == Brightness.dark
-              ? const [V27Palette.midnight, V27Palette.deepTeal]
-              : const [Color(0xFFE4F3F2), Color(0xFFE9EEF2)],
+              ? [
+                  V27Palette.midnight,
+                  Color.lerp(colors.primary, V27Palette.midnight, 0.72)!,
+                ]
+              : [
+                  Color.lerp(colors.primary, Colors.white, 0.84)!,
+                  const Color(0xFFE9EEF2),
+                ],
         ),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: colors.primary.withValues(alpha: 0.2)),

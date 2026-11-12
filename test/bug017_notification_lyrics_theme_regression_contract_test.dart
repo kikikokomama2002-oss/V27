@@ -87,10 +87,13 @@ void main() {
   });
 
   test('theme switches reuse prebuilt themes without animated interpolation', () {
-    expect(theme, contains('static final ThemeData lightTheme = light();'));
-    expect(theme, contains('static final ThemeData darkTheme = amoledDark();'));
-    expect(main, contains('theme: AppTheme.lightTheme'));
-    expect(main, contains('darkTheme: AppTheme.darkTheme'));
+    expect(theme, contains('_lightThemeCache'));
+    expect(theme, contains('_darkThemeCache'));
+    expect(theme, contains('_lightThemeCache.putIfAbsent(accent'));
+    expect(theme, contains('_darkThemeCache.putIfAbsent(accent'));
+    expect(main, contains('theme: AppTheme.light(accent: accent.lightColor)'));
+    expect(main, contains('darkTheme: AppTheme.amoledDark(accent: accent.darkColor)'));
     expect(main, contains('themeAnimationDuration: Duration.zero'));
+    expect(main.replaceAll(RegExp(r'//.*'), ''), isNot(contains('AnimatedTheme')));
   });
 }

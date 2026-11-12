@@ -60,9 +60,13 @@ abstract final class V27Motion {
 }
 
 class AppTheme {
-  static ThemeData amoledDark({
-    Color accent = V27Palette.electricTeal,
-  }) {
+  static final Map<Color, ThemeData> _darkThemeCache = <Color, ThemeData>{};
+  static final Map<Color, ThemeData> _lightThemeCache = <Color, ThemeData>{};
+
+  static ThemeData amoledDark({Color accent = V27Palette.electricTeal}) =>
+      _darkThemeCache.putIfAbsent(accent, () => _buildAmoledDark(accent));
+
+  static ThemeData _buildAmoledDark(Color accent) {
     final scheme = ColorScheme.fromSeed(
       seedColor: accent,
       brightness: Brightness.dark,
@@ -159,9 +163,10 @@ class AppTheme {
     );
   }
 
-  static ThemeData light({
-    Color accent = V27Palette.deepTeal,
-  }) {
+  static ThemeData light({Color accent = V27Palette.deepTeal}) =>
+      _lightThemeCache.putIfAbsent(accent, () => _buildLight(accent));
+
+  static ThemeData _buildLight(Color accent) {
     final scheme = ColorScheme.fromSeed(
       seedColor: accent,
       brightness: Brightness.light,

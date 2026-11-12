@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -445,22 +446,66 @@ final groupPreviewTrackProvider =
   throw const LibrarySnapshotUnstableException();
 });
 
-/// Small, unfiltered Home preview. It is intentionally independent of
+/// A randomly selected Home recommendation together with its real position
+/// in the full-library queue. Keeping the queue index matters: the visible
+/// five picks are not necessarily the first five items in title order.
+class DashboardQuickPick {
+  const DashboardQuickPick({required this.track, required this.queueIndex});
+
+  final Track track;
+  final int queueIndex;
+}
+
+/// Small, unfiltered Home preview. It is intentionally independent from
 /// [searchQueryProvider], so a previous Tracks search never changes the Home
-/// dashboard. The result is capped at five rows and revalidated against the
-/// repository generation just like the paged library feeds.
+/// dashboard. Each app process receives a new random sample, while the
+/// non-autoDispose provider keeps that sample stable during the session.
+/// Only five single-row indexed reads are performed, even for large libraries.
 final dashboardQuickPicksProvider =
-    FutureProvider.autoDispose<List<Track>>((ref) async {
+    FutureProvider.autoDispose<List<DashboardQuickPick>>((ref) async {
+  ref.keepAlive();
   ref.watch(libraryChangesProvider);
   final repo = ref.watch(libraryRepositoryProvider);
-  if (repo == null) return const <Track>[];
+  if (repo == null) return const <DashboardQuickPick>[];
 
   for (var attempt = 0; attempt < 3; attempt++) {
     final generation = await repo.waitForStableSnapshot();
-    final tracks = await repo.tracksPage(offset: 0, limit: 5);
+    final count = await repo.tracksCount();
+    if (count == 0) {
+      if (generation == repo.libraryGeneration && !repo.scanInProgress) {
+        repo.completeInitialLibraryRead();
+        return const <DashboardQuickPick>[];
+      }
+      continue;
+    }
+
+    final random = math.Random.secure();
+    final wanted = math.min(5, count).toInt();
+    final positions = <int>{};
+    if (count <= 5) {
+      positions.addAll(List<int>.generate(count, (index) => index));
+    } else {
+      while (positions.length < wanted) {
+        positions.add(random.nextInt(count));
+      }
+    }
+    final queueIndexes = positions.toList(growable: false)..shuffle(random);
+    final pages = await Future.wait(
+      queueIndexes.map((offset) => repo.tracksPage(offset: offset, limit: 1)),
+    );
+    final picks = <DashboardQuickPick>[];
+    for (var index = 0; index < pages.length; index++) {
+      if (pages[index].isNotEmpty) {
+        picks.add(DashboardQuickPick(
+          track: pages[index].first,
+          queueIndex: queueIndexes[index],
+        ));
+      }
+    }
+
     if (generation == repo.libraryGeneration && !repo.scanInProgress) {
       repo.completeInitialLibraryRead();
-      return tracks;
+      return List<DashboardQuickPick>.unmodifiable(picks);
     }
   }
   throw const LibrarySnapshotUnstableException();

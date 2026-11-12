@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/providers.dart';
+import '../data/db/track.dart';
 import '../core/generation_gate.dart';
 import '../data/repositories/library_repository.dart';
 import 'player_channel.dart';
@@ -178,6 +179,69 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   final Set<int> _cancelledRequestIds = {};
 
   LibraryRepository? get _repo => _ref.read(libraryRepositoryProvider);
+
+  /// Returns a bounded preview of the logical queue after the current track.
+  /// It resolves through the active QueueSpec and never creates a second queue.
+  Future<List<Track>> loadUpcomingQueueTracks({int limit = 40}) async {
+    final repo = _repo;
+    final spec = _activeSpec;
+    final volume = state.currentTrackVolume;
+    final trackId = state.currentTrackId;
+    if (repo == null || spec == null || volume == null || trackId == null || limit <= 0) {
+      return const <Track>[];
+    }
+    final currentIndex = await spec.resolvePosition(
+      repo, volume: volume, mediaStoreId: trackId,
+    );
+    if (currentIndex == null) return const <Track>[];
+    final page = await spec.resolvePage(
+      repo, offset: currentIndex + 1, limit: limit.clamp(1, 40).toInt(),
+    );
+    final tracks = <Track>[];
+    for (final item in page) {
+      final id = item['id'];
+      final itemVolume = item['volume'];
+      if (id is! num || itemVolume is! String) continue;
+      final track = await repo.trackByMediaStoreIdentity(itemVolume, id.toInt());
+      if (track != null) tracks.add(track);
+    }
+    return tracks;
+  }
+
+  /// Starts a selected item from the active logical queue. [hintIndex] is a
+  /// positional hint only; [playQueue] re-resolves the stable MediaStore
+  /// identity against a stable library snapshot before changing playback.
+  Future<void> playTrackFromActiveQueue(Track track) async {
+    final repo = _repo;
+    final spec = _activeSpec;
+    final currentVolume = state.currentTrackVolume;
+    final currentId = state.currentTrackId;
+    if (repo == null || spec == null || currentVolume == null || currentId == null ||
+        track.mediaStoreVolume.trim().isEmpty || track.mediaStoreId <= 0) {
+      return;
+    }
+    final currentIndex = await spec.resolvePosition(
+      repo,
+      volume: currentVolume,
+      mediaStoreId: currentId,
+    );
+    if (currentIndex == null) return;
+    final page = await spec.resolvePage(
+      repo,
+      offset: currentIndex + 1,
+      limit: 40,
+    );
+    final relativeIndex = page.indexWhere((item) =>
+        item['volume'] == track.mediaStoreVolume &&
+        item['id'] == track.mediaStoreId);
+    if (relativeIndex < 0) return;
+    await playQueue(
+      spec,
+      startIndex: currentIndex + 1 + relativeIndex,
+      startVolume: track.mediaStoreVolume,
+      startMediaStoreId: track.mediaStoreId,
+    );
+  }
 
   /// Establishes [spec] (all tracks / a search / one group) as the
   /// active queue and starts playback at its logical [startIndex] —

@@ -6,6 +6,8 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../playback/player_channel.dart';
 
 import '../../core/theme_mode_provider.dart';
+import '../../core/accent_color_provider.dart';
+import '../../core/localization.dart';
 import '../../core/theme.dart';
 import '../../core/permissions.dart';
 import '../../core/playlist_store.dart';
@@ -104,11 +106,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final ref = this.ref;
+    final strings = V27Strings.of(context);
     final isDark = ref.watch(themeModeProvider) == ThemeMode.dark;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: Text(strings.text('settings')),
       ),
       body: ListView(
         physics: const BouncingScrollPhysics(),
@@ -121,8 +124,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: isDark
-                    ? const [V27Palette.midnight, Color(0xFF103B3A)]
-                    : const [Color(0xFFDDF4F1), Color(0xFFE9EEF2)],
+                    ? [
+                        V27Palette.midnight,
+                        Color.lerp(Theme.of(context).colorScheme.primary, V27Palette.midnight, 0.72)!,
+                      ]
+                    : [
+                        Color.lerp(Theme.of(context).colorScheme.primary, Colors.white, 0.84)!,
+                        const Color(0xFFE9EEF2),
+                      ],
               ),
               borderRadius: BorderRadius.circular(V27Radius.xl),
               border: Border.all(
@@ -152,7 +161,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       Text(
                         'MAKE IT YOURS',
                         style: TextStyle(
-                          color: isDark ? V27Palette.electricTeal : V27Palette.deepTeal,
+                          color: Theme.of(context).colorScheme.primary,
                           fontSize: 10,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 2,
@@ -229,6 +238,53 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ]),
 
           _settingsSection(context, 'General', Icons.settings_rounded, [
+            Consumer(builder: (context, ref, _) {
+              final selected = ref.watch(languageProvider);
+              return ListTile(
+                leading: const Icon(Icons.language_rounded),
+                title: Text(strings.text('language')),
+                subtitle: Text(strings.text('choose_language')),
+                trailing: DropdownButton<String>(
+                  value: selected,
+                  onChanged: (value) { if (value != null) ref.read(languageProvider.notifier).select(value); },
+                  items: v27Languages.map((item) => DropdownMenuItem(value: item.code, child: Text(item.name))).toList(),
+                ),
+              );
+            }),
+            Consumer(builder: (context, ref, _) {
+              final selected = ref.watch(accentColorProvider);
+              return ListTile(
+                leading: const Icon(Icons.palette_outlined),
+                title: Text(strings.text('accent_color')),
+                subtitle: Text(strings.text('personalize_accent')),
+                trailing: DropdownButton<String>(
+                  value: selected,
+                  onChanged: (value) { if (value != null) ref.read(accentColorProvider.notifier).select(value); },
+                  items: accentOptions
+                      .map(
+                        (item) => DropdownMenuItem<String>(
+                          value: item.id,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 14,
+                                height: 14,
+                                decoration: BoxDecoration(
+                                  color: isDark ? item.darkColor : item.lightColor,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(item.name),
+                            ],
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              );
+            }),
             SwitchListTile(
               secondary: const Icon(Icons.dark_mode_outlined),
               title: const Text('Dark mode'),
@@ -455,8 +511,8 @@ class _SleepTimerSettingState extends State<_SleepTimerSetting> {
             _remainingSeconds = 0;
           });
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Sleep timer finished. Playback paused.'),
+            SnackBar(
+              content: Text(V27Strings.of(context).text('sleep_timer_finished')),
             ),
           );
         }
@@ -477,7 +533,7 @@ class _SleepTimerSettingState extends State<_SleepTimerSetting> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not start the sleep timer.')),
+        SnackBar(content: Text(V27Strings.of(context).text('could_not_start_timer'))),
       );
     }
   }
@@ -488,7 +544,7 @@ class _SleepTimerSettingState extends State<_SleepTimerSetting> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not cancel the sleep timer.')),
+          SnackBar(content: Text(V27Strings.of(context).text('could_not_cancel_timer'))),
         );
       }
       return;
@@ -520,7 +576,7 @@ class _SleepTimerSettingState extends State<_SleepTimerSetting> {
   String get _remainingLabel {
     final minutes = _remainingSeconds ~/ 60;
     final seconds = _remainingSeconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')} remaining';
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')} ${V27Strings.of(context).text('remaining')}';
   }
 
   @override
@@ -534,15 +590,15 @@ class _SleepTimerSettingState extends State<_SleepTimerSetting> {
   Widget build(BuildContext context) {
     return ListTile(
       leading: const Icon(Icons.bedtime_outlined),
-      title: const Text('Sleep timer'),
+      title: Text(V27Strings.of(context).text('sleep_timer')),
       subtitle: Text(
         _loading
-            ? 'Loading timer…'
-            : (_active ? _remainingLabel : 'Stop playback after a set time'),
+            ? V27Strings.of(context).text('loading_timer')
+            : (_active ? _remainingLabel : V27Strings.of(context).text('stop_playback_set_time')),
       ),
       trailing: _active
           ? IconButton(
-              tooltip: 'Cancel sleep timer',
+              tooltip: V27Strings.of(context).text('cancel_sleep_timer'),
               onPressed: _cancelTimer,
               icon: const Icon(Icons.close),
             )
@@ -553,23 +609,23 @@ class _SleepTimerSettingState extends State<_SleepTimerSetting> {
           builder: (sheetContext) => SafeArea(
             child: Wrap(
               children: [
-                const ListTile(title: Text('Stop playback after')),
+                ListTile(title: Text(V27Strings.of(sheetContext).text('stop_playback_after'))),
                 ..._presets.map(
                   (minutes) => ListTile(
                     leading: const Icon(Icons.timer_outlined),
-                    title: Text('$minutes minutes'),
+                    title: Text('$minutes ${V27Strings.of(sheetContext).text('minutes')}'),
                     onTap: () => Navigator.pop(sheetContext, minutes),
                   ),
                 ),
                 ListTile(
                   leading: const Icon(Icons.edit_outlined),
-                  title: const Text('Custom duration…'),
+                  title: Text('${V27Strings.of(sheetContext).text('custom_duration')}…'),
                   onTap: () => Navigator.pop(sheetContext, -1),
                 ),
                 if (_active)
                   ListTile(
                     leading: const Icon(Icons.close),
-                    title: const Text('Cancel active timer'),
+                    title: Text(V27Strings.of(sheetContext).text('cancel_active_timer')),
                     onTap: () => Navigator.pop(sheetContext, 0),
                   ),
               ],
@@ -1214,7 +1270,7 @@ class _ManagePlaylistsScreen extends ConsumerWidget {
                                                     actions: [
                                                       TextButton(
                                                         onPressed: () => Navigator.pop(dialogContext, false),
-                                                        child: const Text('Cancel'),
+                                                        child: Text(V27Strings.of(context).text('cancel')),
                                                       ),
                                                       FilledButton(
                                                         onPressed: () => Navigator.pop(dialogContext, true),
@@ -1468,8 +1524,14 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: isDark
-                                ? const [V27Palette.midnight, Color(0xFF103B3A)]
-                                : const [Color(0xFFDDF4F1), Color(0xFFE9EEF2)],
+                                ? [
+                                    V27Palette.midnight,
+                                    Color.lerp(Theme.of(context).colorScheme.primary, V27Palette.midnight, 0.72)!,
+                                  ]
+                                : [
+                                    Color.lerp(Theme.of(context).colorScheme.primary, Colors.white, 0.84)!,
+                                    const Color(0xFFE9EEF2),
+                                  ],
                           ),
                           borderRadius: BorderRadius.circular(V27Radius.xl),
                           border: Border.all(
@@ -1759,8 +1821,8 @@ class _CustomSleepTimerDialogState extends State<_CustomSleepTimerDialog> {
     final value = int.tryParse(_controller.text.trim());
     if (value == null || value < 1 || value > 720) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Enter a whole number from 1 to 720.'),
+        SnackBar(
+          content: Text(V27Strings.of(context).text('whole_number')),
         ),
       );
       return;
@@ -1771,25 +1833,25 @@ class _CustomSleepTimerDialogState extends State<_CustomSleepTimerDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Custom sleep timer'),
+      title: Text(V27Strings.of(context).text('custom_sleep_timer')),
       content: TextField(
         controller: _controller,
         autofocus: true,
         keyboardType: TextInputType.number,
-        decoration: const InputDecoration(
-          labelText: 'Minutes',
-          helperText: 'Enter a duration from 1 to 720 minutes.',
+        decoration: InputDecoration(
+          labelText: V27Strings.of(context).text('minutes'),
+          helperText: V27Strings.of(context).text('enter_duration'),
         ),
         onSubmitted: (_) => _start(),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(V27Strings.of(context).text('cancel')),
         ),
         FilledButton(
           onPressed: _start,
-          child: const Text('Start'),
+          child: Text(V27Strings.of(context).text('start')),
         ),
       ],
     );

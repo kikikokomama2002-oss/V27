@@ -1,11 +1,13 @@
 package com.example.musicplayer.channels
 
 import android.content.Context
+import android.content.ClipData
 import android.database.ContentObserver
 import android.content.Intent
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
 import android.net.Uri
+import android.media.RingtoneManager
 import android.os.Build
 import android.os.Environment
 import android.os.Handler
@@ -13,6 +15,7 @@ import android.os.Looper
 import android.os.storage.StorageManager
 import android.os.storage.StorageVolume
 import android.provider.MediaStore
+import android.provider.Settings
 import androidx.core.content.ContextCompat
 import com.example.musicplayer.lyrics.EmbeddedLyricsReader
 import com.example.musicplayer.lyrics.SidecarLyricsResolver
@@ -35,6 +38,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.UUID
+import android.content.IntentSender
 
 const val PLAYER_CHANNEL_NAME = "com.example.musicplayer/player"
 
@@ -62,6 +66,7 @@ class PlayerChannel(
     private val context: Context,
     private val channel: MethodChannel,
     private val isHeadless: Boolean = false,
+    private val launchMediaStoreDeleteRequest: ((IntentSender, MethodChannel.Result) -> Unit)? = null,
     private val launchLyricsFolderPicker: (MethodChannel.Result) -> Unit
 ) : MethodChannel.MethodCallHandler {
 
@@ -1201,6 +1206,95 @@ class PlayerChannel(
                     } catch (e: Exception) {
                         result.error("SKIP_PREVIOUS_FAILED", e.message, null)
                     }
+                }
+            }
+
+            // Share a local audio file through Android's system Sharesheet.
+            // ClipData + read grants let the receiving app open MediaStore's
+            // content URI without exposing raw filesystem paths.
+            "shareTrackFile" -> {
+                try {
+                    val uriString = call.argument<String>("contentUri")
+                        ?: throw IllegalArgumentException("contentUri is required")
+                    val title = call.argument<String>("title")?.take(120)?.ifBlank { "Audio track" }
+                        ?: "Audio track"
+                    val uri = Uri.parse(uriString)
+                    require(uri.scheme == "content") { "Only MediaStore content URIs can be shared" }
+                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "audio/*"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        clipData = ClipData.newRawUri(title, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    val chooser = Intent.createChooser(sendIntent, "Share $title").apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(chooser)
+                    result.success(true)
+                } catch (e: Exception) {
+                    result.error("SHARE_TRACK_FAILED", e.message, null)
+                }
+            }
+
+            // MediaStore requires an explicit system confirmation before an
+            // app can delete audio files it did not create. The ActivityResult
+            // launcher owns that confirmation UI and returns the user's choice.
+            "deleteMediaStoreTrack" -> {
+                try {
+                    val uriString = call.argument<String>("contentUri")
+                        ?: throw IllegalArgumentException("contentUri is required")
+                    val uri = Uri.parse(uriString)
+                    require(uri.scheme == "content") { "Only MediaStore content URIs can be deleted" }
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                        result.error(
+                            "DELETE_REQUIRES_ANDROID_11",
+                            "System-confirmed track deletion requires Android 11 or newer.",
+                            null,
+                        )
+                        return
+                    }
+                    val launcher = launchMediaStoreDeleteRequest
+                    if (launcher == null) {
+                        result.error("DELETE_UI_UNAVAILABLE", "Delete confirmation is unavailable in this runtime.", null)
+                        return
+                    }
+                    val request = MediaStore.createDeleteRequest(context.contentResolver, listOf(uri))
+                    launcher(request.intentSender, result)
+                } catch (e: Exception) {
+                    result.error("DELETE_TRACK_FAILED", e.message, null)
+                }
+            }
+
+            // Android protects changing the default ringtone behind the
+            // special WRITE_SETTINGS access. Never attempt to bypass it: open
+            // the official system page and let the user retry after granting.
+            "setTrackAsDefaultSound" -> {
+                try {
+                    val uriString = call.argument<String>("contentUri")
+                        ?: throw IllegalArgumentException("contentUri is required")
+                    val requestedType = call.argument<String>("type")
+                        ?: throw IllegalArgumentException("type is required")
+                    val ringtoneType = when (requestedType) {
+                        "ringtone" -> RingtoneManager.TYPE_RINGTONE
+                        "notification" -> RingtoneManager.TYPE_NOTIFICATION
+                        "alarm" -> RingtoneManager.TYPE_ALARM
+                        else -> throw IllegalArgumentException("Unsupported default sound type")
+                    }
+                    val uri = Uri.parse(uriString)
+                    require(uri.scheme == "content") { "Only MediaStore content URIs can be set as a default sound" }
+                    if (!Settings.System.canWrite(context)) {
+                        val settingsIntent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                            data = Uri.parse("package:${context.packageName}")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(settingsIntent)
+                        result.success(false)
+                        return
+                    }
+                    RingtoneManager.setActualDefaultRingtoneUri(context, ringtoneType, uri)
+                    result.success(true)
+                } catch (e: Exception) {
+                    result.error("SET_DEFAULT_SOUND_FAILED", e.message, null)
                 }
             }
 

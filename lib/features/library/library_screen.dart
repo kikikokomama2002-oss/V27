@@ -11,6 +11,7 @@ import '../../core/widgets/track_artwork.dart';
 import '../../data/db/track.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../playback/queue_spec.dart';
+import '../../playback/player_channel.dart';
 import '../player/mini_player.dart';
 import '../settings/settings_screen.dart';
 import 'library_dashboard.dart';
@@ -32,6 +33,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   late final Debouncer _searchDebounce;
   late final FocusNode _searchFocusNode;
   late final TextEditingController _searchController;
+  late final AnimationController _openingController;
+  bool _showOpeningOverlay = true;
 
   @override
   void initState() {
@@ -41,6 +44,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     _tabController = TabController(length: _visibleTabs.length, vsync: this)
       ..addListener(_handleTabChange);
     _searchDebounce = Debouncer(const Duration(milliseconds: 250));
+    _openingController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1150),
+    )..addStatusListener((status) {
+        if (status == AnimationStatus.completed && mounted) {
+          setState(() => _showOpeningOverlay = false);
+        }
+      });
+    _openingController.forward();
   }
 
   void _handleTabChange() {
@@ -79,6 +91,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     _searchController.dispose();
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
+    _openingController.dispose();
     super.dispose();
   }
 
@@ -94,7 +107,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             ? 'Good afternoon'
             : 'Good evening';
 
-    return Scaffold(
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Scaffold(
       body: SafeArea(
         child: Column(
           children: [
@@ -244,12 +260,23 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           ],
         ),
       ),
+    ),
+        if (_showOpeningOverlay)
+          _OpeningAnimationOverlay(
+            controller: _openingController,
+            backgroundColor: theme.scaffoldBackgroundColor,
+          ),
+      ],
     );
   }
 
   Widget _pageForTab(LibraryTab tab) {
     return switch (tab) {
-      LibraryTab.home => LibraryDashboard(onSelectTab: _selectTab),
+      LibraryTab.home => LibraryDashboard(
+          onSelectTab: _selectTab,
+          onTrackAction: (context, track, action) =>
+              _handleTrackAction(context, ref, track, action),
+        ),
       LibraryTab.tracks => const _TracksTab(),
       LibraryTab.albums => const _GroupedTab(
           groupBy: GroupField.album,
@@ -265,6 +292,112 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
         ),
       LibraryTab.playlists => const LibraryPlaylistsTab(),
     };
+  }
+}
+
+class _OpeningAnimationOverlay extends StatelessWidget {
+  const _OpeningAnimationOverlay({required this.controller, required this.backgroundColor});
+
+  final Animation<double> controller;
+  final Color backgroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, child) {
+        final progress = Curves.easeInOutCubic.transform(controller.value);
+        return IgnorePointer(
+          child: Opacity(
+            opacity: (1 - progress).clamp(0.0, 1.0),
+            child: ColoredBox(
+              color: backgroundColor,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 190,
+                      height: 190,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            child: Transform.translate(
+                              offset: Offset(0, -150 * progress),
+                              child: SizedBox(
+                                width: 190,
+                                height: 95,
+                                child: ClipRect(
+                                  child: OverflowBox(
+                                    alignment: Alignment.topCenter,
+                                    minWidth: 190,
+                                    maxWidth: 190,
+                                    minHeight: 190,
+                                    maxHeight: 190,
+                                    child: Image.asset(
+                                      'assets/v27_icon.png',
+                                      width: 190,
+                                      height: 190,
+                                      fit: BoxFit.fill,
+                                      filterQuality: FilterQuality.high,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 95,
+                            left: 0,
+                            child: Transform.translate(
+                              offset: Offset(0, 150 * progress),
+                              child: SizedBox(
+                                width: 190,
+                                height: 95,
+                                child: ClipRect(
+                                  child: OverflowBox(
+                                    alignment: Alignment.topCenter,
+                                    minWidth: 190,
+                                    maxWidth: 190,
+                                    minHeight: 190,
+                                    maxHeight: 190,
+                                    child: Transform.translate(
+                                      offset: const Offset(0, -95),
+                                      child: Image.asset(
+                                        'assets/v27_icon.png',
+                                        width: 190,
+                                        height: 190,
+                                        fit: BoxFit.fill,
+                                        filterQuality: FilterQuality.high,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 19),
+                    Text(
+                      'V27 PULSE',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            letterSpacing: 4.2,
+                            fontWeight: FontWeight.w900,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -903,13 +1036,9 @@ class _TrackTile extends ConsumerWidget {
                     size: 20,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
-                  onSelected: (action) {
-                    if (action == 'add_to_playlist') {
-                      _addTrackToPlaylist(context, ref, track);
-                    }
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
+                  onSelected: (action) => _handleTrackAction(context, ref, track, action),
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
                       value: 'add_to_playlist',
                       child: Row(
                         children: [
@@ -919,6 +1048,32 @@ class _TrackTile extends ConsumerWidget {
                         ],
                       ),
                     ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: _TrackMenuLabel(icon: Icons.delete_outline_rounded, label: 'Delete'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'share',
+                      child: _TrackMenuLabel(icon: Icons.share_outlined, label: 'Share'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'details',
+                      child: _TrackMenuLabel(icon: Icons.info_outline_rounded, label: 'Track details'),
+                    ),
+                    PopupMenuItem(
+                      value: 'album',
+                      enabled: track.album.trim().isNotEmpty,
+                      child: const _TrackMenuLabel(icon: Icons.album_outlined, label: 'Album'),
+                    ),
+                    PopupMenuItem(
+                      value: 'artist',
+                      enabled: track.artist.trim().isNotEmpty,
+                      child: const _TrackMenuLabel(icon: Icons.person_outline_rounded, label: 'Artist'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'set_as',
+                      child: _TrackMenuLabel(icon: Icons.notifications_active_outlined, label: 'Set as'),
+                    ),
                   ],
                 ),
               ],
@@ -926,6 +1081,277 @@ class _TrackTile extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+void _handleTrackAction(BuildContext context, WidgetRef ref, Track track, String action) {
+  switch (action) {
+    case 'add_to_playlist':
+      _addTrackToPlaylist(context, ref, track);
+      break;
+    case 'delete':
+      _deleteTrackFromDevice(context, ref, track);
+      break;
+    case 'share':
+      _shareTrackFile(context, track);
+      break;
+    case 'details':
+      _showTrackDetails(context, track);
+      break;
+    case 'album':
+      _openTrackGroup(context, track, GroupField.album);
+      break;
+    case 'artist':
+      _openTrackGroup(context, track, GroupField.artist);
+      break;
+    case 'set_as':
+      _showSetAsOptions(context, track);
+      break;
+  }
+}
+
+class _TrackMenuLabel extends StatelessWidget {
+  const _TrackMenuLabel({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Icon(icon, size: 20),
+          const SizedBox(width: 10),
+          Text(label),
+        ],
+      );
+}
+
+class LibraryGroupDetailPage extends ConsumerWidget {
+  const LibraryGroupDetailPage({
+    super.key,
+    required this.field,
+    required this.name,
+    required this.displayName,
+  });
+
+  final GroupField field;
+  final String name;
+  final String displayName;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final key = GroupKey(field, name);
+    final notifier = ref.read(groupTracksPagingProvider(key).notifier);
+    notifier.ensureCountLoaded();
+    final paging = ref.watch(groupTracksPagingProvider(key));
+    final count = paging.totalCount;
+    final theme = Theme.of(context);
+
+    Widget body;
+    if (paging.countError != null) {
+      body = Center(
+        child: TextButton.icon(
+          onPressed: notifier.retryCount,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Could not load tracks · Retry'),
+        ),
+      );
+    } else if (count == null) {
+      body = const Center(child: CircularProgressIndicator());
+    } else if (count == 0) {
+      body = const Center(child: Text('No tracks found in this collection.'));
+    } else {
+      body = ListView.builder(
+        physics: const BouncingScrollPhysics(),
+        itemCount: count,
+        itemExtent: 72,
+        itemBuilder: (context, index) {
+          final track = notifier.itemAt(index);
+          if (track == null) {
+            final error = notifier.pageErrorAt(index);
+            return error != null
+                ? _PagingPageError(onRetry: () => notifier.retryPage(index ~/ notifier.pageSize))
+                : const _LoadingRow(compact: true);
+          }
+          return _TrackTile(
+            track: track,
+            onTap: () => ref.read(playbackControllerProvider.notifier).playQueue(
+              GroupQueueSpec(field, name),
+              startIndex: index,
+              startVolume: track.mediaStoreVolume,
+              startMediaStoreId: track.mediaStoreId,
+            ),
+          );
+        },
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(displayName, maxLines: 1, overflow: TextOverflow.ellipsis),
+        backgroundColor: theme.scaffoldBackgroundColor,
+      ),
+      body: body,
+      bottomNavigationBar: const MiniPlayer(),
+    );
+  }
+}
+
+void _openTrackGroup(BuildContext context, Track track, GroupField field) {
+  final name = field == GroupField.album ? track.album.trim() : track.artist.trim();
+  if (name.isEmpty) return;
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => LibraryGroupDetailPage(
+        field: field,
+        name: name,
+        displayName: name,
+      ),
+    ),
+  );
+}
+
+Future<void> _showTrackDetails(BuildContext context, Track track) async {
+  final duration = Duration(milliseconds: track.durationMs);
+  final hours = duration.inHours;
+  final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+  final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+  final durationText = hours > 0
+      ? '${hours.toString().padLeft(2, '0')}:$minutes:$seconds'
+      : '$minutes:$seconds';
+  final details = <(String, String)>[
+    ('Title', track.title),
+    ('Artist', track.artist),
+    ('Album', track.album),
+    ('Duration', durationText),
+    ('File name', track.displayName),
+    ('Folder', track.relativePath?.trim().isNotEmpty == true ? track.relativePath! : track.folder),
+    ('Storage volume', track.mediaStoreVolume),
+    ('MediaStore ID', track.mediaStoreId.toString()),
+  ];
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(track.title, style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 12),
+              for (final detail in details)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 112,
+                        child: Text(detail.$1, style: Theme.of(sheetContext).textTheme.bodySmall?.copyWith(color: Theme.of(sheetContext).colorScheme.onSurfaceVariant)),
+                      ),
+                      Expanded(child: Text(detail.$2, style: Theme.of(sheetContext).textTheme.bodyMedium)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+Future<void> _shareTrackFile(BuildContext context, Track track) async {
+  try {
+    await PlayerChannel.instance.shareTrackFile(contentUri: track.contentUri, title: track.title);
+  } on PlatformException catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error.message ?? 'Could not share this audio file.')),
+    );
+  }
+}
+
+Future<void> _deleteTrackFromDevice(BuildContext context, WidgetRef ref, Track track) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Delete track?'),
+      content: Text('Delete “${track.title}” from this device? The audio file will be permanently removed after Android confirmation.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Delete')),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+  try {
+    final deleted = await PlayerChannel.instance.deleteMediaStoreTrack(track.contentUri);
+    if (!context.mounted) return;
+    if (!deleted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Deletion was cancelled.')),
+      );
+      return;
+    }
+    final repo = ref.read(libraryRepositoryProvider);
+    if (repo != null) await repo.scanAndPersist();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Track deleted from your device.')),
+    );
+  } on PlatformException catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error.message ?? 'Could not delete this track.')),
+    );
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Track deleted, but the library could not refresh: $error')),
+    );
+  }
+}
+
+Future<void> _showSetAsOptions(BuildContext context, Track track) async {
+  final selectedType = await showModalBottomSheet<String>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const ListTile(title: Text('Set this track as')),
+          ListTile(leading: const Icon(Icons.phone_android_rounded), title: const Text('Ringtone'), onTap: () => Navigator.pop(sheetContext, 'ringtone')),
+          ListTile(leading: const Icon(Icons.notifications_active_outlined), title: const Text('Notification sound'), onTap: () => Navigator.pop(sheetContext, 'notification')),
+          ListTile(leading: const Icon(Icons.alarm_rounded), title: const Text('Alarm sound'), onTap: () => Navigator.pop(sheetContext, 'alarm')),
+        ],
+      ),
+    ),
+  );
+  if (selectedType == null || !context.mounted) return;
+  try {
+    final succeeded = await PlayerChannel.instance.setTrackAsDefaultSound(
+      contentUri: track.contentUri,
+      type: selectedType,
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(succeeded
+            ? 'Default ${selectedType == 'ringtone' ? 'ringtone' : selectedType == 'notification' ? 'notification sound' : 'alarm sound'} updated.'
+            : 'Allow V27 PULSE to modify system settings, then choose Set as again.'),
+      ),
+    );
+  } on PlatformException catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error.message ?? 'Could not set the default sound.')),
     );
   }
 }

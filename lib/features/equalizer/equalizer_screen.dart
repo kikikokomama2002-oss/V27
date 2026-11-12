@@ -202,8 +202,14 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: dark
-                  ? const [V27Palette.midnight, V27Palette.deepTeal]
-                  : const [Color(0xFFE4F3F2), Color(0xFFE9EEF2)],
+                  ? [
+                      V27Palette.midnight,
+                      Color.lerp(Theme.of(context).colorScheme.primary, V27Palette.midnight, 0.72)!,
+                    ]
+                  : [
+                      Color.lerp(Theme.of(context).colorScheme.primary, Colors.white, 0.84)!,
+                      const Color(0xFFE9EEF2),
+                    ],
             ),
             borderRadius: BorderRadius.circular(26),
             border: Border.all(
