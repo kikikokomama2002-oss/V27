@@ -23,12 +23,12 @@ void main() {
   });
 
   test('Dashboard contains local-library shelves matching the reference layout', () {
-    expect(dashboard, contains("'Speed dial'"));
-    expect(dashboard, contains("title: 'Quick picks'"));
-    expect(dashboard, contains("title: 'Albums in your library'"));
-    expect(dashboard, contains("title: 'Explore artists'"));
-    expect(dashboard, contains("title: 'Your playlists'"));
-    expect(dashboard, contains("title: 'Browse folders'"));
+    expect(dashboard, contains("text('speed_dial')"));
+    expect(dashboard, contains("text('quick_picks')"));
+    expect(dashboard, contains("text('albums_in_library')"));
+    expect(dashboard, contains("text('explore_artists')"));
+    expect(dashboard, contains("text('your_playlists')"));
+    expect(dashboard, contains("text('browse_folders')"));
     expect(dashboard, contains('CustomScrollView('));
     expect(dashboard, contains('ListView.builder('));
   });
