@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/playlist_store.dart';
+import '../../core/localization.dart';
 import '../../core/providers.dart';
 import '../../core/widgets/playlist_name_dialog.dart';
 import '../../core/widgets/track_artwork.dart';
@@ -139,7 +140,7 @@ class LibraryDashboard extends ConsumerWidget {
         ),
         SliverToBoxAdapter(
           child: _DashboardGroupShelf(
-            title: 'Albums in your library',
+            title: V27Strings.of(context).text('albums_in_library'),
             field: GroupField.album,
             notifier: albumsNotifier,
             totalCount: albumsState.totalCount,
@@ -149,7 +150,7 @@ class LibraryDashboard extends ConsumerWidget {
         ),
         SliverToBoxAdapter(
           child: _DashboardGroupShelf(
-            title: 'Explore artists',
+            title: V27Strings.of(context).text('explore_artists'),
             field: GroupField.artist,
             notifier: artistsNotifier,
             totalCount: artistsState.totalCount,
@@ -165,7 +166,7 @@ class LibraryDashboard extends ConsumerWidget {
         ),
         SliverToBoxAdapter(
           child: _DashboardGroupShelf(
-            title: 'Browse folders',
+            title: V27Strings.of(context).text('browse_folders'),
             field: GroupField.folder,
             notifier: foldersNotifier,
             totalCount: foldersState.totalCount,
@@ -199,26 +200,26 @@ class _SpeedDialSection extends StatelessWidget {
     final theme = Theme.of(context);
     final shortcuts = <_LibraryShortcutData>[
       _LibraryShortcutData(
-        title: 'All tracks',
-        subtitle: _countLabel(trackCount, 'song'),
+        title: V27Strings.of(context).text('all_tracks'),
+        subtitle: _countLabel(context, trackCount, 'song'),
         icon: Icons.music_note_rounded,
         tab: LibraryTab.tracks,
       ),
       _LibraryShortcutData(
-        title: 'Playlists',
-        subtitle: _countLabel(playlistCount, 'playlist'),
+        title: V27Strings.of(context).text('playlists'),
+        subtitle: _countLabel(context, playlistCount, 'playlist'),
         icon: Icons.queue_music_rounded,
         tab: LibraryTab.playlists,
       ),
       _LibraryShortcutData(
-        title: 'Albums',
-        subtitle: _countLabel(albumCount, 'album'),
+        title: V27Strings.of(context).text('albums'),
+        subtitle: _countLabel(context, albumCount, 'album'),
         icon: Icons.album_rounded,
         tab: LibraryTab.albums,
       ),
       _LibraryShortcutData(
-        title: 'Artists',
-        subtitle: _countLabel(artistCount, 'artist'),
+        title: V27Strings.of(context).text('artists'),
+        subtitle: _countLabel(context, artistCount, 'artist'),
         icon: Icons.mic_rounded,
         tab: LibraryTab.artists,
       ),
@@ -232,7 +233,7 @@ class _SpeedDialSection extends StatelessWidget {
           Row(
             children: [
               Text(
-                'Speed dial',
+                V27Strings.of(context).text('speed_dial'),
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w800,
                   letterSpacing: -0.45,
@@ -242,7 +243,7 @@ class _SpeedDialSection extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(right: 18),
                 child: Text(
-                  'QUICK ACCESS',
+                  V27Strings.of(context).text('quick_access'),
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: theme.colorScheme.primary,
                     letterSpacing: 1.2,
@@ -271,9 +272,10 @@ class _SpeedDialSection extends StatelessWidget {
     );
   }
 
-  static String _countLabel(int? count, String noun) {
-    if (count == null) return 'Loading…';
-    return '$count ${count == 1 ? noun : '${noun}s'}';
+  static String _countLabel(BuildContext context, int? count, String noun) {
+    final strings = V27Strings.of(context);
+    if (count == null) return strings.text('loading');
+    return '$count ${strings.text(count == 1 ? noun : '${noun}s')}';
   }
 }
 
@@ -371,8 +373,8 @@ class _QuickPicksSection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _DashboardSectionHeading(
-            title: 'Quick picks',
-            actionLabel: 'See all',
+            title: V27Strings.of(context).text('quick_picks'),
+            actionLabel: V27Strings.of(context).text('see_all'),
             onAction: onSelectAll,
           ),
           const SizedBox(height: 6),
@@ -386,10 +388,10 @@ class _QuickPicksSection extends ConsumerWidget {
             ),
             error: (_, __) => Row(
               children: [
-                const Expanded(child: Text('Quick picks could not be loaded.')),
+                Expanded(child: Text(V27Strings.of(context).text('quick_picks_error'))),
                 TextButton(
                   onPressed: () => ref.invalidate(dashboardQuickPicksProvider),
-                  child: const Text('Retry'),
+                  child: Text(V27Strings.of(context).text('retry')),
                 ),
               ],
             ),
@@ -397,7 +399,7 @@ class _QuickPicksSection extends ConsumerWidget {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     child: Text(
-                      'Your scanned songs will appear here.',
+                      V27Strings.of(context).text('scanned_songs_appear'),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -546,39 +548,39 @@ class _QuickPickRow extends ConsumerWidget {
               ),
             ),
             PopupMenuButton<String>(
-              tooltip: 'Track options',
+              tooltip: V27Strings.of(context).text('track_options'),
               icon: Icon(Icons.more_vert_rounded, color: theme.colorScheme.onSurfaceVariant),
               onSelected: (value) => onTrackAction(context, track, value),
               itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'add_to_playlist',
-                  child: _DashboardTrackMenuLabel(icon: Icons.playlist_add_rounded, label: 'Add to playlist'),
+                PopupMenuItem(
+                  value: 'set_as',
+                  child: _DashboardTrackMenuLabel(icon: Icons.notifications_active_outlined, label: V27Strings.of(context).text('set_as')),
                 ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: _DashboardTrackMenuLabel(icon: Icons.delete_outline_rounded, label: 'Delete'),
-                ),
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'share',
-                  child: _DashboardTrackMenuLabel(icon: Icons.share_outlined, label: 'Share'),
+                  child: _DashboardTrackMenuLabel(icon: Icons.share_outlined, label: V27Strings.of(context).text('share')),
                 ),
-                const PopupMenuItem(
+                PopupMenuItem(
+                  value: 'delete',
+                  child: _DashboardTrackMenuLabel(icon: Icons.delete_outline_rounded, label: V27Strings.of(context).text('delete')),
+                ),
+                PopupMenuItem(
                   value: 'details',
-                  child: _DashboardTrackMenuLabel(icon: Icons.info_outline_rounded, label: 'Track details'),
+                  child: _DashboardTrackMenuLabel(icon: Icons.info_outline_rounded, label: V27Strings.of(context).text('track_details')),
+                ),
+                PopupMenuItem(
+                  value: 'add_to_playlist',
+                  child: _DashboardTrackMenuLabel(icon: Icons.playlist_add_rounded, label: V27Strings.of(context).text('add_to_playlist')),
                 ),
                 PopupMenuItem(
                   value: 'album',
                   enabled: track.album.trim().isNotEmpty,
-                  child: const _DashboardTrackMenuLabel(icon: Icons.album_outlined, label: 'Album'),
+                  child: _DashboardTrackMenuLabel(icon: Icons.album_outlined, label: V27Strings.of(context).text('album')),
                 ),
                 PopupMenuItem(
                   value: 'artist',
                   enabled: track.artist.trim().isNotEmpty,
-                  child: const _DashboardTrackMenuLabel(icon: Icons.person_outline_rounded, label: 'Artist'),
-                ),
-                const PopupMenuItem(
-                  value: 'set_as',
-                  child: _DashboardTrackMenuLabel(icon: Icons.notifications_active_outlined, label: 'Set as'),
+                  child: _DashboardTrackMenuLabel(icon: Icons.person_outline_rounded, label: V27Strings.of(context).text('artist')),
                 ),
               ],
             ),
@@ -620,15 +622,15 @@ class _DashboardGroupShelf extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(horizontal: 18),
             child: _DashboardSectionHeading(
               title: title,
-              actionLabel: countError == null ? 'See all' : 'Retry',
+              actionLabel: countError == null ? V27Strings.of(context).text('see_all') : V27Strings.of(context).text('retry'),
               onAction: countError == null ? onSeeAll : notifier.retryCount,
             ),
           ),
           const SizedBox(height: 11),
           if (countError != null)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-              child: Text('This section could not be loaded.'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+              child: Text(V27Strings.of(context).text('library_unavailable')),
             )
           else
             SizedBox(
@@ -740,7 +742,7 @@ class _DashboardGroupCard extends ConsumerWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              '${group.trackCount} ${group.trackCount == 1 ? 'track' : 'tracks'}',
+              '${group.trackCount} ${V27Strings.of(context).text(group.trackCount == 1 ? 'song' : 'songs')}',
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ],
@@ -775,13 +777,13 @@ class _DashboardPlaylistsShelf extends StatelessWidget {
                 children: [
                   Icon(Icons.queue_music_rounded, color: theme.colorScheme.primary, size: 30),
                   const SizedBox(width: 13),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Create your first playlist', style: TextStyle(fontWeight: FontWeight.w800)),
-                        SizedBox(height: 3),
-                        Text('Bring your favorite local tracks together.'),
+                        Text(V27Strings.of(context).text('create_playlist'), style: const TextStyle(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 3),
+                        Text(V27Strings.of(context).text('create_playlist_prompt')),
                       ],
                     ),
                   ),
@@ -802,8 +804,8 @@ class _DashboardPlaylistsShelf extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18),
             child: _DashboardSectionHeading(
-              title: 'Your playlists',
-              actionLabel: 'See all',
+              title: V27Strings.of(context).text('your_playlists'),
+              actionLabel: V27Strings.of(context).text('see_all'),
               onAction: onSeeAll,
             ),
           ),
@@ -889,12 +891,12 @@ class _DashboardPlaylistCard extends ConsumerWidget {
                       color: Colors.black.withValues(alpha: 0.36),
                       shape: const CircleBorder(),
                       child: PopupMenuButton<String>(
-                        tooltip: 'Playlist options',
+                        tooltip: V27Strings.of(context).text('playlist_options'),
                         icon: const Icon(Icons.more_horiz_rounded, color: Colors.white),
                         onSelected: (value) => _handlePlaylistAction(context, ref, playlist, value),
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(value: 'rename', child: Text('Rename')),
-                          PopupMenuItem(value: 'delete', child: Text('Delete')),
+                        itemBuilder: (_) => [
+                          PopupMenuItem(value: 'rename', child: Text(V27Strings.of(context).text('rename'))),
+                          PopupMenuItem(value: 'delete', child: Text(V27Strings.of(context).text('delete'))),
                         ],
                       ),
                     ),
@@ -904,7 +906,7 @@ class _DashboardPlaylistCard extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             Text(playlist.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
-            Text('${playlist.songs.length} ${playlist.songs.length == 1 ? 'song' : 'songs'}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            Text('${playlist.songs.length} ${V27Strings.of(context).text(playlist.songs.length == 1 ? 'song' : 'songs')}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ],
         ),
       ),
@@ -933,8 +935,8 @@ class LibraryPlaylistDetailPage extends ConsumerWidget {
     }
     if (playlist == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Playlist')),
-        body: const Center(child: Text('This playlist is no longer available.')),
+        appBar: AppBar(title: Text(V27Strings.of(context).text('playlist'))),
+        body: Center(child: Text(V27Strings.of(context).text('playlist_unavailable'))),
       );
     }
 
@@ -949,19 +951,19 @@ class LibraryPlaylistDetailPage extends ConsumerWidget {
               child: Row(
                 children: [
                   IconButton(
-                    tooltip: 'Back',
+                    tooltip: V27Strings.of(context).text('back'),
                     onPressed: () => Navigator.of(context).maybePop(),
                     icon: const Icon(Icons.arrow_back_rounded),
                   ),
                   const SizedBox(width: 7),
                   Expanded(
                     child: Text(
-                      'Your playlist',
+                      V27Strings.of(context).text('your_playlist'),
                       style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                     ),
                   ),
                   PopupMenuButton<String>(
-                    tooltip: 'Playlist options',
+                    tooltip: V27Strings.of(context).text('playlist_options'),
                     onSelected: (value) async {
                       await _handlePlaylistAction(context, ref, currentPlaylist, value);
                       final stillExists = ref.read(playlistStoreProvider).playlists
@@ -970,9 +972,9 @@ class LibraryPlaylistDetailPage extends ConsumerWidget {
                         Navigator.of(context).maybePop();
                       }
                     },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'rename', child: Text('Rename')),
-                      PopupMenuItem(value: 'delete', child: Text('Delete')),
+                    itemBuilder: (_) => [
+                      PopupMenuItem(value: 'rename', child: Text(V27Strings.of(context).text('rename'))),
+                      PopupMenuItem(value: 'delete', child: Text(V27Strings.of(context).text('delete'))),
                     ],
                   ),
                 ],
@@ -1013,12 +1015,12 @@ class LibraryPlaylistDetailPage extends ConsumerWidget {
                         ),
                         const SizedBox(height: 7),
                         Text(
-                          'Here it is, your playlist!',
+                          V27Strings.of(context).text('playlist_intro'),
                           style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                         ),
                         const SizedBox(height: 5),
                         Text(
-                          '${currentPlaylist.songs.length} ${currentPlaylist.songs.length == 1 ? 'song' : 'songs'}',
+                          '${currentPlaylist.songs.length} ${V27Strings.of(context).text(currentPlaylist.songs.length == 1 ? 'song' : 'songs')}',
                           style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.w700),
                         ),
                       ],
@@ -1037,7 +1039,7 @@ class LibraryPlaylistDetailPage extends ConsumerWidget {
                           ? null
                           : () => _playPlaylistFromUi(context, ref, currentPlaylist),
                       icon: const Icon(Icons.play_arrow_rounded),
-                      label: const Text('Play playlist'),
+                      label: Text(V27Strings.of(context).text('play_playlist')),
                     ),
                   ),
                 ],
@@ -1048,7 +1050,7 @@ class LibraryPlaylistDetailPage extends ConsumerWidget {
               child: currentPlaylist.songs.isEmpty
                   ? Center(
                       child: Text(
-                        'Add tracks from your library to get started.',
+                        V27Strings.of(context).text('add_tracks_prompt'),
                         style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                       ),
                     )
@@ -1082,16 +1084,16 @@ class _PlaylistDetailTrackRow extends ConsumerWidget {
     final result = ref.watch(playlistTrackAtProvider((playlistId: playlist.id, index: index)));
     return result.when(
       loading: () => const _QuickPickLoadingRow(),
-      error: (_, __) => const ListTile(
-        leading: Icon(Icons.error_outline_rounded),
-        title: Text('Could not load this track'),
+      error: (_, __) => ListTile(
+        leading: const Icon(Icons.error_outline_rounded),
+        title: Text(V27Strings.of(context).text('could_not_load_track')),
       ),
       data: (track) {
         if (track == null) {
           return ListTile(
             leading: Icon(Icons.music_off_rounded, color: theme.colorScheme.onSurfaceVariant),
-            title: Text('Track unavailable', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-            subtitle: const Text('This file may have been removed from the device.'),
+            title: Text(V27Strings.of(context).text('track_unavailable'), style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+            subtitle: Text(V27Strings.of(context).text('file_removed')),
           );
         }
         return Padding(
@@ -1173,14 +1175,14 @@ class LibraryPlaylistsTab extends ConsumerWidget {
             children: [
               Icon(Icons.queue_music_rounded, size: 58, color: theme.colorScheme.primary),
               const SizedBox(height: 14),
-              Text('No playlists yet', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              Text(V27Strings.of(context).text('no_playlists'), style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 7),
-              Text('Create a playlist and add tracks from your library.', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              Text(V27Strings.of(context).text('create_playlist_prompt'), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
               const SizedBox(height: 17),
               FilledButton.icon(
                 onPressed: () => _createPlaylist(context, ref),
                 icon: const Icon(Icons.add_rounded),
-                label: const Text('Create playlist'),
+                label: Text(V27Strings.of(context).text('create_playlist')),
               ),
             ],
           ),
@@ -1198,14 +1200,14 @@ class LibraryPlaylistsTab extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    '${state.playlists.length} ${state.playlists.length == 1 ? 'playlist' : 'playlists'}',
+                    '${state.playlists.length} ${V27Strings.of(context).text(state.playlists.length == 1 ? 'playlist' : 'playlists')}',
                     style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ),
                 FilledButton.tonalIcon(
                   onPressed: () => _createPlaylist(context, ref),
                   icon: const Icon(Icons.add_rounded, size: 18),
-                  label: const Text('New playlist'),
+                  label: Text(V27Strings.of(context).text('create_playlist')),
                 ),
               ],
             ),
@@ -1271,16 +1273,16 @@ class _PlaylistListRow extends ConsumerWidget {
                     children: [
                       Text(playlist.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
                       const SizedBox(height: 4),
-                      Text('${playlist.songs.length} ${playlist.songs.length == 1 ? 'song' : 'songs'}', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                      Text('${playlist.songs.length} ${V27Strings.of(context).text(playlist.songs.length == 1 ? 'song' : 'songs')}', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                     ],
                   ),
                 ),
                 PopupMenuButton<String>(
-                  tooltip: 'Playlist options',
+                  tooltip: V27Strings.of(context).text('playlist_options'),
                   onSelected: (value) => _handlePlaylistAction(context, ref, playlist, value),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'rename', child: Text('Rename')),
-                    PopupMenuItem(value: 'delete', child: Text('Delete')),
+                  itemBuilder: (_) => [
+                    PopupMenuItem(value: 'rename', child: Text(V27Strings.of(context).text('rename'))),
+                    PopupMenuItem(value: 'delete', child: Text(V27Strings.of(context).text('delete'))),
                   ],
                 ),
               ],
@@ -1326,7 +1328,7 @@ Future<void> _createPlaylist(BuildContext context, WidgetRef ref) async {
   final created = await ref.read(playlistStoreProvider.notifier).createPlaylist(name);
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(created == null ? 'Playlist name is empty or already used.' : 'Playlist created.')),
+    SnackBar(content: Text(created == null ? V27Strings.of(context).text('playlist_name_invalid') : V27Strings.of(context).text('playlist_created'))),
   );
 }
 
@@ -1341,7 +1343,7 @@ Future<void> _handlePlaylistAction(
     final name = await showDialog<String>(
       context: context,
       builder: (_) => PlaylistNameDialog(
-        title: 'Rename playlist',
+        title: V27Strings.of(context).text('rename_playlist'),
         initialValue: playlist.name,
         submitLabel: 'Save',
       ),
@@ -1351,7 +1353,7 @@ Future<void> _handlePlaylistAction(
     if (!context.mounted) return;
     if (!renamed) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Playlist name is empty or already used.')),
+        SnackBar(content: Text(V27Strings.of(context).text('playlist_name_invalid'))),
       );
     }
     return;
@@ -1361,11 +1363,11 @@ Future<void> _handlePlaylistAction(
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete playlist?'),
-        content: Text('Delete “${playlist.name}”? The audio files will not be deleted.'),
+        title: Text(V27Strings.of(context).text('delete_playlist_question')),
+        content: Text(V27Strings.of(context).text('delete_playlist_confirm')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Delete')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(V27Strings.of(context).text('cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text(V27Strings.of(context).text('delete'))),
         ],
       ),
     );
@@ -1421,7 +1423,7 @@ Future<void> _playPlaylistFromUi(
     if (firstAvailable == null) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('This playlist has no available tracks in your library.')),
+          SnackBar(content: Text(V27Strings.of(context).text('playlist_no_tracks'))),
         );
       }
       return;
@@ -1438,7 +1440,7 @@ Future<void> _playPlaylistFromUi(
 
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('The library is being updated. Please try again.')),
+      SnackBar(content: Text(V27Strings.of(context).text('library_updating'))),
     );
   }
 }
@@ -1455,16 +1457,16 @@ Future<void> _addTrackToPlaylist(BuildContext context, WidgetRef ref, Track trac
       child: ListView(
         shrinkWrap: true,
         children: [
-          const ListTile(title: Text('Add song to playlist')),
+          ListTile(title: Text(V27Strings.of(context).text('add_song_playlist'))),
           ...state.playlists.map((playlist) => ListTile(
                 leading: const Icon(Icons.queue_music_rounded),
                 title: Text(playlist.name),
-                subtitle: Text('${playlist.songs.length} songs'),
+                subtitle: Text('${playlist.songs.length} ${V27Strings.of(context).text('songs')}'),
                 onTap: () => Navigator.pop(sheetContext, playlist.id),
               )),
           ListTile(
             leading: const Icon(Icons.add_rounded),
-            title: const Text('Create playlist…'),
+            title: Text('${V27Strings.of(context).text('create_playlist')}…'),
             onTap: () => Navigator.pop(sheetContext, createAction),
           ),
         ],
@@ -1479,7 +1481,7 @@ Future<void> _addTrackToPlaylist(BuildContext context, WidgetRef ref, Track trac
     final created = await store.createPlaylist(name);
     if (created == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Playlist name is empty or already used.')),
+        SnackBar(content: Text(V27Strings.of(context).text('playlist_name_invalid'))),
       );
       return;
     }
@@ -1488,7 +1490,7 @@ Future<void> _addTrackToPlaylist(BuildContext context, WidgetRef ref, Track trac
   final added = await store.addTrack(playlistId, track);
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(added ? 'Added “${track.title}” to playlist.' : 'This song is already in that playlist.')),
+    SnackBar(content: Text(added ? V27Strings.of(context).text('added_to_playlist').replaceAll('{title}', track.title) : V27Strings.of(context).text('already_in_playlist'))),
   );
 }
 

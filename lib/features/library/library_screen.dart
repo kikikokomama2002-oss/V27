@@ -1,7 +1,9 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
+import '../../core/localization.dart';
 import '../../core/theme.dart';
 import '../../core/playlist_store.dart';
 import '../../core/widgets/playlist_name_dialog.dart';
@@ -46,7 +48,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     _searchDebounce = Debouncer(const Duration(milliseconds: 250));
     _openingController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1150),
+      duration: const Duration(milliseconds: 2600),
     )..addStatusListener((status) {
         if (status == AnimationStatus.completed && mounted) {
           setState(() => _showOpeningOverlay = false);
@@ -74,12 +76,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       await repo.scanAndPersist(reconcileDeletions: true);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Library scan completed.')),
+        SnackBar(content: Text(V27Strings.of(context).text('library_scan_completed'))),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Library scan failed: $e')),
+        SnackBar(content: Text(V27Strings.of(context).text('library_scan_failed'))),
       );
     }
   }
@@ -98,14 +100,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final strings = V27Strings.of(context);
     final searchQuery = ref.watch(searchQueryProvider);
     final isTracksTab = _visibleTabs[_tabController.index] == LibraryTab.tracks;
     final hour = DateTime.now().hour;
     final greeting = hour < 12
-        ? 'Good morning'
+        ? strings.text('good_morning')
         : hour < 17
-            ? 'Good afternoon'
-            : 'Good evening';
+            ? strings.text('good_afternoon')
+            : strings.text('good_evening');
 
     return Stack(
       fit: StackFit.expand,
@@ -132,7 +135,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          'Your music',
+                          strings.text('your_music'),
                           style: theme.textTheme.headlineMedium?.copyWith(
                             fontWeight: FontWeight.w900,
                             letterSpacing: -1.1,
@@ -141,7 +144,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                         ),
                         const SizedBox(height: 5),
                         Text(
-                          'V27 PULSE  ·  OFFLINE LIBRARY',
+                          strings.text('offline_library'),
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                             fontWeight: FontWeight.w700,
@@ -152,7 +155,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                     ),
                   ),
                   IconButton.filledTonal(
-                    tooltip: 'Search tracks',
+                    tooltip: strings.text('search_tracks'),
                     visualDensity: VisualDensity.compact,
                     onPressed: () {
                       _selectTab(LibraryTab.tracks);
@@ -164,14 +167,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                   ),
                   const SizedBox(width: 3),
                   IconButton.filledTonal(
-                    tooltip: 'Rescan library',
+                    tooltip: strings.text('rescan_library'),
                     visualDensity: VisualDensity.compact,
                     onPressed: _manualRescan,
                     icon: const Icon(Icons.refresh_rounded, size: 20),
                   ),
                   const SizedBox(width: 3),
                   IconButton.filledTonal(
-                    tooltip: 'Settings',
+                    tooltip: strings.text('settings'),
                     visualDensity: VisualDensity.compact,
                     onPressed: () {
                       Navigator.of(context).push(
@@ -205,7 +208,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                 labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
                 unselectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                 labelPadding: const EdgeInsets.symmetric(horizontal: 13),
-                tabs: _visibleTabs.map((tab) => Tab(text: tab.label)).toList(growable: false),
+                tabs: _visibleTabs.map((tab) => Tab(text: tab.localizedLabel(context))).toList(growable: false),
               ),
             ),
             if (isTracksTab)
@@ -220,12 +223,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                   maxLength: QueueSpec.maxQueryLength,
                   maxLengthEnforcement: MaxLengthEnforcement.enforced,
                   decoration: InputDecoration(
-                    hintText: 'Search your tracks…',
+                    hintText: strings.text('search_your_tracks'),
                     prefixIcon: const Icon(Icons.search_rounded),
                     suffixIcon: searchQuery.isEmpty
                         ? null
                         : IconButton(
-                            tooltip: 'Clear search',
+                            tooltip: strings.text('clear_search'),
                             onPressed: () {
                               _searchDebounce.dispose();
                               _searchController.clear();
@@ -253,6 +256,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             Expanded(
               child: TabBarView(
                 controller: _tabController,
+                physics: const _LibraryTabScrollPhysics(),
+                dragStartBehavior: DragStartBehavior.down,
                 children: _visibleTabs.map(_pageForTab).toList(growable: false),
               ),
             ),
@@ -295,6 +300,23 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   }
 }
 
+class _LibraryTabScrollPhysics extends PageScrollPhysics {
+  const _LibraryTabScrollPhysics({super.parent});
+
+  @override
+  double get minFlingDistance => 7;
+
+  @override
+  double get minFlingVelocity => 70;
+
+  @override
+  double get dragStartDistanceMotionThreshold => 2;
+
+  @override
+  _LibraryTabScrollPhysics applyTo(ScrollPhysics? ancestor) =>
+      _LibraryTabScrollPhysics(parent: buildParent(ancestor));
+}
+
 class _OpeningAnimationOverlay extends StatelessWidget {
   const _OpeningAnimationOverlay({required this.controller, required this.backgroundColor});
 
@@ -306,7 +328,9 @@ class _OpeningAnimationOverlay extends StatelessWidget {
     return AnimatedBuilder(
       animation: controller,
       builder: (context, child) {
-        final progress = Curves.easeInOutCubic.transform(controller.value);
+        final progress = Curves.easeInOutCubic.transform(
+          ((controller.value - 0.12) / 0.88).clamp(0.0, 1.0).toDouble(),
+        );
         return IgnorePointer(
           child: Opacity(
             opacity: (1 - progress).clamp(0.0, 1.0),
@@ -619,9 +643,7 @@ class _GroupTileState extends State<_GroupTile> {
                             ),
                             const SizedBox(height: 5),
                             Text(
-                              widget.group.trackCount == 1
-                                  ? '1 track'
-                                  : '${widget.group.trackCount} tracks',
+                              '${widget.group.trackCount} ${V27Strings.of(context).text(widget.group.trackCount == 1 ? 'song' : 'songs')}',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                                 fontSize: 11.5,
@@ -798,7 +820,7 @@ class _PagingCountError extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'Library unavailable',
+                V27Strings.of(context).text('library_unavailable'),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w800,
@@ -806,7 +828,7 @@ class _PagingCountError extends StatelessWidget {
               ),
               const SizedBox(height: 7),
               Text(
-                'We couldn’t load your library information. Check your storage access and try again.',
+                V27Strings.of(context).text('library_unavailable_detail'),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
@@ -817,7 +839,7 @@ class _PagingCountError extends StatelessWidget {
               FilledButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: const Text('Try again'),
+                label: Text(V27Strings.of(context).text('try_again')),
               ),
             ],
           ),
@@ -858,7 +880,7 @@ class _PagingPageError extends StatelessWidget {
           child: TextButton.icon(
             onPressed: onRetry,
             icon: const Icon(Icons.refresh_rounded, size: 17),
-            label: const Text('Couldn’t load more · Retry'),
+            label: Text(V27Strings.of(context).text('could_not_load_more')),
             style: TextButton.styleFrom(
               foregroundColor: theme.colorScheme.primary,
               visualDensity: VisualDensity.compact,
@@ -1030,7 +1052,7 @@ class _TrackTile extends ConsumerWidget {
                   ),
                 ),
                 PopupMenuButton<String>(
-                  tooltip: 'Track options',
+                  tooltip: V27Strings.of(context).text('track_options'),
                   icon: Icon(
                     Icons.more_vert_rounded,
                     size: 20,
@@ -1038,41 +1060,35 @@ class _TrackTile extends ConsumerWidget {
                   ),
                   onSelected: (action) => _handleTrackAction(context, ref, track, action),
                   itemBuilder: (_) => [
-                    const PopupMenuItem(
-                      value: 'add_to_playlist',
-                      child: Row(
-                        children: [
-                          Icon(Icons.playlist_add_rounded, size: 20),
-                          SizedBox(width: 10),
-                          Text('Add to playlist'),
-                        ],
-                      ),
+                    PopupMenuItem(
+                      value: 'set_as',
+                      child: _TrackMenuLabel(icon: Icons.notifications_active_outlined, label: V27Strings.of(context).text('set_as')),
                     ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: _TrackMenuLabel(icon: Icons.delete_outline_rounded, label: 'Delete'),
-                    ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'share',
-                      child: _TrackMenuLabel(icon: Icons.share_outlined, label: 'Share'),
+                      child: _TrackMenuLabel(icon: Icons.share_outlined, label: V27Strings.of(context).text('share')),
                     ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: _TrackMenuLabel(icon: Icons.delete_outline_rounded, label: V27Strings.of(context).text('delete')),
+                    ),
+                    PopupMenuItem(
                       value: 'details',
-                      child: _TrackMenuLabel(icon: Icons.info_outline_rounded, label: 'Track details'),
+                      child: _TrackMenuLabel(icon: Icons.info_outline_rounded, label: V27Strings.of(context).text('track_details')),
+                    ),
+                    PopupMenuItem(
+                      value: 'add_to_playlist',
+                      child: _TrackMenuLabel(icon: Icons.playlist_add_rounded, label: V27Strings.of(context).text('add_to_playlist')),
                     ),
                     PopupMenuItem(
                       value: 'album',
                       enabled: track.album.trim().isNotEmpty,
-                      child: const _TrackMenuLabel(icon: Icons.album_outlined, label: 'Album'),
+                      child: _TrackMenuLabel(icon: Icons.album_outlined, label: V27Strings.of(context).text('album')),
                     ),
                     PopupMenuItem(
                       value: 'artist',
                       enabled: track.artist.trim().isNotEmpty,
-                      child: const _TrackMenuLabel(icon: Icons.person_outline_rounded, label: 'Artist'),
-                    ),
-                    const PopupMenuItem(
-                      value: 'set_as',
-                      child: _TrackMenuLabel(icon: Icons.notifications_active_outlined, label: 'Set as'),
+                      child: _TrackMenuLabel(icon: Icons.person_outline_rounded, label: V27Strings.of(context).text('artist')),
                     ),
                   ],
                 ),
@@ -1154,13 +1170,13 @@ class LibraryGroupDetailPage extends ConsumerWidget {
         child: TextButton.icon(
           onPressed: notifier.retryCount,
           icon: const Icon(Icons.refresh_rounded),
-          label: const Text('Could not load tracks · Retry'),
+          label: Text(V27Strings.of(context).text('could_not_load_tracks')),
         ),
       );
     } else if (count == null) {
       body = const Center(child: CircularProgressIndicator());
     } else if (count == 0) {
-      body = const Center(child: Text('No tracks found in this collection.'));
+      body = Center(child: Text(V27Strings.of(context).text('no_tracks_found')));
     } else {
       body = ListView.builder(
         physics: const BouncingScrollPhysics(),
@@ -1221,14 +1237,14 @@ Future<void> _showTrackDetails(BuildContext context, Track track) async {
       ? '${hours.toString().padLeft(2, '0')}:$minutes:$seconds'
       : '$minutes:$seconds';
   final details = <(String, String)>[
-    ('Title', track.title),
-    ('Artist', track.artist),
-    ('Album', track.album),
-    ('Duration', durationText),
-    ('File name', track.displayName),
-    ('Folder', track.relativePath?.trim().isNotEmpty == true ? track.relativePath! : track.folder),
-    ('Storage volume', track.mediaStoreVolume),
-    ('MediaStore ID', track.mediaStoreId.toString()),
+    (V27Strings.of(context).text('detail_title'), track.title),
+    (V27Strings.of(context).text('artist'), track.artist),
+    (V27Strings.of(context).text('album'), track.album),
+    (V27Strings.of(context).text('duration'), durationText),
+    (V27Strings.of(context).text('file_name'), track.displayName),
+    (V27Strings.of(context).text('folder'), track.relativePath?.trim().isNotEmpty == true ? track.relativePath! : track.folder),
+    (V27Strings.of(context).text('storage_volume'), track.mediaStoreVolume),
+    (V27Strings.of(context).text('media_store_id'), track.mediaStoreId.toString()),
   ];
   await showModalBottomSheet<void>(
     context: context,
@@ -1269,10 +1285,10 @@ Future<void> _showTrackDetails(BuildContext context, Track track) async {
 Future<void> _shareTrackFile(BuildContext context, Track track) async {
   try {
     await PlayerChannel.instance.shareTrackFile(contentUri: track.contentUri, title: track.title);
-  } on PlatformException catch (error) {
+  } on PlatformException catch (_) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(error.message ?? 'Could not share this audio file.')),
+      SnackBar(content: Text(V27Strings.of(context).text('could_not_share'))),
     );
   }
 }
@@ -1281,11 +1297,11 @@ Future<void> _deleteTrackFromDevice(BuildContext context, WidgetRef ref, Track t
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      title: const Text('Delete track?'),
-      content: Text('Delete “${track.title}” from this device? The audio file will be permanently removed after Android confirmation.'),
+      title: Text(V27Strings.of(context).text('delete_track')),
+      content: Text('${V27Strings.of(context).text('track_delete_confirm')}'),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Delete')),
+        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(V27Strings.of(context).text('cancel'))),
+        FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text(V27Strings.of(context).text('delete'))),
       ],
     ),
   );
@@ -1295,7 +1311,7 @@ Future<void> _deleteTrackFromDevice(BuildContext context, WidgetRef ref, Track t
     if (!context.mounted) return;
     if (!deleted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Deletion was cancelled.')),
+        SnackBar(content: Text(V27Strings.of(context).text('deletion_cancelled'))),
       );
       return;
     }
@@ -1303,17 +1319,17 @@ Future<void> _deleteTrackFromDevice(BuildContext context, WidgetRef ref, Track t
     if (repo != null) await repo.scanAndPersist();
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Track deleted from your device.')),
+      SnackBar(content: Text(V27Strings.of(context).text('track_deleted'))),
     );
-  } on PlatformException catch (error) {
+  } on PlatformException catch (_) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(error.message ?? 'Could not delete this track.')),
+      SnackBar(content: Text(V27Strings.of(context).text('could_not_delete_track'))),
     );
-  } catch (error) {
+  } catch (_) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Track deleted, but the library could not refresh: $error')),
+      SnackBar(content: Text(V27Strings.of(context).text('track_deleted_refresh_error'))),
     );
   }
 }
@@ -1326,10 +1342,10 @@ Future<void> _showSetAsOptions(BuildContext context, Track track) async {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const ListTile(title: Text('Set this track as')),
-          ListTile(leading: const Icon(Icons.phone_android_rounded), title: const Text('Ringtone'), onTap: () => Navigator.pop(sheetContext, 'ringtone')),
-          ListTile(leading: const Icon(Icons.notifications_active_outlined), title: const Text('Notification sound'), onTap: () => Navigator.pop(sheetContext, 'notification')),
-          ListTile(leading: const Icon(Icons.alarm_rounded), title: const Text('Alarm sound'), onTap: () => Navigator.pop(sheetContext, 'alarm')),
+          ListTile(title: Text(V27Strings.of(context).text('set_track_as'))),
+          ListTile(leading: const Icon(Icons.phone_android_rounded), title: Text(V27Strings.of(context).text('ringtone')), onTap: () => Navigator.pop(sheetContext, 'ringtone')),
+          ListTile(leading: const Icon(Icons.notifications_active_outlined), title: Text(V27Strings.of(context).text('notification_sound')), onTap: () => Navigator.pop(sheetContext, 'notification')),
+          ListTile(leading: const Icon(Icons.alarm_rounded), title: Text(V27Strings.of(context).text('alarm_sound')), onTap: () => Navigator.pop(sheetContext, 'alarm')),
         ],
       ),
     ),
@@ -1344,14 +1360,14 @@ Future<void> _showSetAsOptions(BuildContext context, Track track) async {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(succeeded
-            ? 'Default ${selectedType == 'ringtone' ? 'ringtone' : selectedType == 'notification' ? 'notification sound' : 'alarm sound'} updated.'
-            : 'Allow V27 PULSE to modify system settings, then choose Set as again.'),
+            ? V27Strings.of(context).text('default_sound_updated')
+            : V27Strings.of(context).text('system_settings_permission_needed')),
       ),
     );
-  } on PlatformException catch (error) {
+  } on PlatformException catch (_) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(error.message ?? 'Could not set the default sound.')),
+      SnackBar(content: Text(V27Strings.of(context).text('could_not_update_setting'))),
     );
   }
 }
@@ -1359,9 +1375,9 @@ Future<void> _showSetAsOptions(BuildContext context, Track track) async {
 Future<String?> _playlistNamePrompt(BuildContext context) {
   return showDialog<String>(
     context: context,
-    builder: (_) => const PlaylistNameDialog(
-      title: 'Create playlist',
-      submitLabel: 'Create',
+    builder: (_) => PlaylistNameDialog(
+      title: V27Strings.of(context).text('create_playlist'),
+      submitLabel: V27Strings.of(context).text('create'),
     ),
   );
 }
@@ -1382,16 +1398,16 @@ Future<void> _addTrackToPlaylist(
       child: ListView(
         shrinkWrap: true,
         children: [
-          const ListTile(title: Text('Add song to playlist')),
+          ListTile(title: Text(V27Strings.of(context).text('add_song_playlist'))),
           ...state.playlists.map((playlist) => ListTile(
             leading: const Icon(Icons.queue_music),
             title: Text(playlist.name),
-            subtitle: Text('${playlist.songs.length} songs'),
+            subtitle: Text('${playlist.songs.length} ${V27Strings.of(context).text('songs')}'),
             onTap: () => Navigator.pop(sheetContext, playlist.id),
           )),
           ListTile(
             leading: const Icon(Icons.add),
-            title: const Text('Create playlist…'),
+            title: Text('${V27Strings.of(context).text('create_playlist')}…'),
             onTap: () => Navigator.pop(sheetContext, createAction),
           ),
         ],
@@ -1406,7 +1422,7 @@ Future<void> _addTrackToPlaylist(
     final created = await store.createPlaylist(name);
     if (created == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Playlist name is empty or already used.')),
+        SnackBar(content: Text(V27Strings.of(context).text('playlist_name_invalid'))),
       );
       return;
     }
@@ -1417,8 +1433,8 @@ Future<void> _addTrackToPlaylist(
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text(added
-          ? 'Added “${track.title}” to playlist.'
-          : 'This song is already in that playlist.'),
+          ? V27Strings.of(context).text('added_to_playlist').replaceAll('{title}', track.title)
+          : V27Strings.of(context).text('already_in_playlist')),
     ),
   );
 }
@@ -1428,11 +1444,10 @@ class _EmptyLibraryState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const _EmptyStateMessage(
+    return _EmptyStateMessage(
       icon: Icons.library_music_rounded,
-      title: 'Your library is waiting',
-      message:
-          'No music found yet. Tap the refresh icon to scan your device, or check your storage permissions.',
+      title: V27Strings.of(context).text('your_library_waiting'),
+      message: V27Strings.of(context).text('empty_library_body'),
     );
   }
 }
@@ -1446,8 +1461,8 @@ class _EmptySearchState extends StatelessWidget {
   Widget build(BuildContext context) {
     return _EmptyStateMessage(
       icon: Icons.search_off_rounded,
-      title: 'No matches found',
-      message: 'We couldn’t find anything for “$query”. Try another title, artist, or album.',
+      title: V27Strings.of(context).text('no_matches_found'),
+      message: V27Strings.of(context).text('try_another_search').replaceAll('{query}', query),
     );
   }
 }

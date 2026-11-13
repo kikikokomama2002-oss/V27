@@ -132,7 +132,7 @@ class _SleepTimerSheetState extends State<_SleepTimerSheet> {
         const SizedBox(height: 8),
         Text(_loading ? strings.text('checking_timer') : _deadline == null ? strings.text('stop_after') : '${strings.text('timer_stops_in')} $_clock', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         const SizedBox(height: 18),
-        Wrap(spacing: 9, runSpacing: 9, children: _presets.map((m) => ActionChip(label: Text('$m min'), onPressed: _busy ? null : () => _start(m))).toList()),
+        Wrap(spacing: 9, runSpacing: 9, children: _presets.map((m) => ActionChip(label: Text('$m ${strings.text('minute_abbrev')}'), onPressed: _busy ? null : () => _start(m))).toList()),
         const SizedBox(height: 10),
         Row(children: [Expanded(child: OutlinedButton.icon(onPressed: _busy ? null : _showCustomDuration, icon: const Icon(Icons.edit_outlined), label: Text(strings.text('custom_duration')))),
           if (_deadline != null) ...[const SizedBox(width: 10), Expanded(child: FilledButton.tonalIcon(onPressed: _busy ? null : _cancel, icon: const Icon(Icons.close_rounded), label: Text(strings.text('cancel_timer'))))],

@@ -62,7 +62,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (!mounted) return;
       setState(() => _skipSilence = previous);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not change silence skipping.')),
+        SnackBar(content: Text(V27Strings.of(context).text('could_not_change_silence'))),
       );
     }
   }
@@ -97,7 +97,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (mounted) {
         setState(() => _speed = previous);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not change playback speed.')),
+          SnackBar(content: Text(V27Strings.of(context).text('could_not_change_speed'))),
         );
       }
     }
@@ -159,7 +159,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'MAKE IT YOURS',
+                        V27Strings.of(context).text('make_it_yours'),
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.primary,
                           fontSize: 10,
@@ -169,7 +169,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Your listening space.',
+                        V27Strings.of(context).text('your_listening_space'),
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.onSurface,
                           fontSize: 20,
@@ -179,7 +179,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Fine-tune the way V27 sounds and feels.',
+                        V27Strings.of(context).text('fine_tune'),
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 12,
@@ -193,13 +193,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 12),
 
-          _settingsSection(context, 'Playback', Icons.graphic_eq_rounded, [
+          _settingsSection(context, V27Strings.of(context).text('playback'), Icons.graphic_eq_rounded, [
             const _SleepTimerSetting(),
             ListTile(
               leading: const Icon(Icons.speed_rounded),
-              title: const Text('Play speed'),
+              title: Text(V27Strings.of(context).text('play_speed')),
               subtitle: Text(
-                _speedLoaded ? '${_speed.toString()}x' : 'Loading…',
+                _speedLoaded ? '${_speed.toString()}x' : V27Strings.of(context).text('loading'),
               ),
               trailing: DropdownButton<double>(
                 value: _speeds.contains(_speed) ? _speed : 1.0,
@@ -215,29 +215,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const _CrossfadeSetting(),
             SwitchListTile(
               secondary: const Icon(Icons.volume_down_outlined),
-              title: const Text('Skip silence'),
-              subtitle: const Text(
-                'Automatically skip silent sections within tracks.',
+              title: Text(V27Strings.of(context).text('skip_silence')),
+              subtitle: Text(
+                V27Strings.of(context).text('skip_silence_description'),
               ),
               value: _skipSilence,
               onChanged: _skipSilenceLoaded ? _changeSkipSilence : null,
             ),
             _NativeSwitchSetting(
               icon: Icons.lock_outline_rounded,
-              title: 'Control music from Lock screen',
-              subtitle: 'Show or hide transport buttons in system media controls.',
+              title: V27Strings.of(context).text('lock_screen_controls'),
+              subtitle: V27Strings.of(context).text('lock_screen_controls_desc'),
               load: PlayerChannel.instance.getLockScreenControlsEnabled,
               save: PlayerChannel.instance.setLockScreenControlsEnabled,
             ),
           ]),
 
-          _settingsSection(context, 'Playlists', Icons.queue_music_rounded, [
+          _settingsSection(context, V27Strings.of(context).text('playlists'), Icons.queue_music_rounded, [
             const _QueueSettingsSetting(),
             const _AvoidDuplicateSongsSetting(),
             const _ManagePlaylistsSetting(),
           ]),
 
-          _settingsSection(context, 'General', Icons.settings_rounded, [
+          _settingsSection(context, V27Strings.of(context).text('general'), Icons.settings_rounded, [
             Consumer(builder: (context, ref, _) {
               final selected = ref.watch(languageProvider);
               return ListTile(
@@ -276,7 +276,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              Text(item.name),
+                              Text(V27Strings.of(context).text('accent_${item.id}')),
                             ],
                           ),
                         ),
@@ -287,8 +287,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             }),
             SwitchListTile(
               secondary: const Icon(Icons.dark_mode_outlined),
-              title: const Text('Dark mode'),
-              subtitle: Text(isDark ? 'On' : 'Off'),
+              title: Text(V27Strings.of(context).text('dark_mode')),
+              subtitle: Text(V27Strings.of(context).text(isDark ? 'on' : 'off')),
               value: isDark,
               onChanged: (value) {
                 ref.read(themeModeProvider.notifier).setDarkMode(value);
@@ -296,34 +296,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             _NativeSwitchSetting(
               icon: Icons.devices_rounded,
-              title: 'Allow external devices to start playback',
-              subtitle: 'Allow other media apps and connected controllers to resume paused music.',
+              title: V27Strings.of(context).text('external_device_playback'),
+              subtitle: V27Strings.of(context).text('external_device_playback_desc'),
               load: PlayerChannel.instance.getExternalDeviceStartEnabled,
               save: PlayerChannel.instance.setExternalDeviceStartEnabled,
             ),
           ]),
 
-          _settingsSection(context, 'Privacy', Icons.shield_outlined, [
+          _settingsSection(context, V27Strings.of(context).text('privacy'), Icons.shield_outlined, [
             const _PermissionsSetting(),
           ]),
 
-          _settingsSection(context, 'About', Icons.info_outline_rounded, [
+          _settingsSection(context, V27Strings.of(context).text('about'), Icons.info_outline_rounded, [
             ListTile(
               leading: const Icon(Icons.info_outline_rounded),
-              title: const Text('About'),
-              subtitle: const Text('App version and information'),
+              title: Text(V27Strings.of(context).text('about')),
+              subtitle: Text(V27Strings.of(context).text('app_version_info')),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => showAboutDialog(
                 context: context,
                 applicationName: 'V27',
                 applicationVersion: '1.0.0+1',
-                applicationLegalese: 'Offline music player for local audio files.',
+                applicationLegalese: V27Strings.of(context).text('application_legalese'),
               ),
             ),
             ListTile(
               leading: const Icon(Icons.mail_outline_rounded),
-              title: const Text('Contact us'),
-              subtitle: const Text('Share feedback using an app on your device.'),
+              title: Text(V27Strings.of(context).text('contact_us')),
+              subtitle: Text(V27Strings.of(context).text('share_feedback')),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () async {
                 try {
@@ -331,8 +331,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 } catch (_) {
                   if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Could not open a feedback app.'),
+                    SnackBar(
+                      content: Text(V27Strings.of(context).text('could_not_open_feedback')),
                     ),
                   );
                 }
@@ -342,7 +342,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 8),
           Center(
             child: Text(
-              'V27 PULSE  •  MADE FOR YOUR MUSIC',
+              'V27 PULSE  •  ${V27Strings.of(context).text('brand_tagline')}',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                     letterSpacing: 1.4,
@@ -653,8 +653,8 @@ class _PermissionsSetting extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       leading: const Icon(Icons.security_outlined),
-      title: const Text('Permissions'),
-      subtitle: const Text('Check audio-library and notification access.'),
+      title: Text(V27Strings.of(context).text('app_permissions')),
+      subtitle: Text(V27Strings.of(context).text('permissions_description')),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => showDialog<void>(
         context: context,
@@ -672,8 +672,8 @@ class _PermissionsDialog extends StatefulWidget {
 }
 
 class _PermissionsDialogState extends State<_PermissionsDialog> with WidgetsBindingObserver {
-  String _audioStatus = 'Checking…';
-  String _notificationStatus = 'Checking…';
+  String _audioStatus = 'checking';
+  String _notificationStatus = 'checking';
   bool _busy = false;
 
   @override
@@ -697,11 +697,11 @@ class _PermissionsDialogState extends State<_PermissionsDialog> with WidgetsBind
   }
 
   String _describe(PermissionStatus status) {
-    if (status.isGranted || status.isLimited) return 'Allowed';
+    if (status.isGranted || status.isLimited) return 'allowed';
     if (status.isPermanentlyDenied || status.isRestricted) {
-      return 'Blocked in system settings';
+      return 'blocked_in_settings';
     }
-    return 'Not granted';
+    return 'not_granted';
   }
 
   Future<void> _refresh() async {
@@ -717,8 +717,8 @@ class _PermissionsDialogState extends State<_PermissionsDialog> with WidgetsBind
     } catch (_) {
       if (mounted) {
         setState(() {
-          _audioStatus = 'Could not read status';
-          _notificationStatus = 'Could not read status';
+          _audioStatus = 'could_not_read_status';
+          _notificationStatus = 'could_not_read_status';
         });
       }
     }
@@ -733,7 +733,7 @@ class _PermissionsDialogState extends State<_PermissionsDialog> with WidgetsBind
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not request permissions.')),
+          SnackBar(content: Text(V27Strings.of(context).text('could_not_request_permissions'))),
         );
       }
     } finally {
@@ -744,7 +744,7 @@ class _PermissionsDialogState extends State<_PermissionsDialog> with WidgetsBind
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('App permissions'),
+      title: Text(V27Strings.of(context).text('app_permissions')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -752,17 +752,17 @@ class _PermissionsDialogState extends State<_PermissionsDialog> with WidgetsBind
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.library_music_outlined),
-            title: const Text('Music library'),
-            subtitle: Text(_audioStatus),
+            title: Text(V27Strings.of(context).text('music_library')),
+            subtitle: Text(V27Strings.of(context).text(_audioStatus)),
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.notifications_outlined),
-            title: const Text('Notifications'),
-            subtitle: Text(_notificationStatus),
+            title: Text(V27Strings.of(context).text('notifications')),
+            subtitle: Text(V27Strings.of(context).text(_notificationStatus)),
           ),
           const SizedBox(height: 4),
-          const Text('Notification permission is optional for scanning music, but affects playback notifications on supported Android versions.'),
+          Text(V27Strings.of(context).text('notification_optional')),
         ],
       ),
       actions: [
@@ -774,15 +774,15 @@ class _PermissionsDialogState extends State<_PermissionsDialog> with WidgetsBind
             } catch (_) {
               if (!mounted) return;
               ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                const SnackBar(content: Text('Could not open system settings.')),
+                SnackBar(content: Text(V27Strings.of(context).text('could_not_open_system_settings'))),
               );
             }
           },
-          child: const Text('Open settings'),
+          child: Text(V27Strings.of(context).text('open_settings')),
         ),
         FilledButton(
           onPressed: _busy ? null : _request,
-          child: Text(_busy ? 'Checking…' : 'Request permissions'),
+          child: Text(_busy ? V27Strings.of(context).text('checking') : V27Strings.of(context).text('request_permissions')),
         ),
       ],
     );
@@ -847,7 +847,7 @@ class _NativeSwitchSettingState extends State<_NativeSwitchSetting> {
       if (!mounted) return;
       setState(() => _value = previous);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update ${widget.title.toLowerCase()}.')),
+        SnackBar(content: Text('${V27Strings.of(context).text('could_not_update_setting')} ${widget.title.toLowerCase()}.')),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -858,7 +858,7 @@ class _NativeSwitchSettingState extends State<_NativeSwitchSetting> {
   Widget build(BuildContext context) => SwitchListTile(
     secondary: Icon(widget.icon),
     title: Text(widget.title),
-    subtitle: Text(_saving ? 'Saving…' : widget.subtitle),
+    subtitle: Text(_saving ? V27Strings.of(context).text('saving') : widget.subtitle),
     value: _value,
     onChanged: _loaded && !_saving ? _setValue : null,
   );
@@ -870,20 +870,18 @@ class _CrossfadeSetting extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListTile(
     leading: const Icon(Icons.shuffle),
-    title: const Text('Crossfade between tracks'),
-    subtitle: const Text('Not enabled yet — needs a dedicated dual-audio transition engine.'),
+    title: Text(V27Strings.of(context).text('crossfade')),
+    subtitle: Text(V27Strings.of(context).text('crossfade_unavailable')),
     trailing: const Icon(Icons.info_outline),
     onTap: () => showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Crossfade is not ready yet'),
-        content: const Text(
-          'V27 currently uses one ExoPlayer with a paged queue. A true crossfade needs two audio streams and coordinated queue transitions. A simple volume fade could restart a song or break Next/Previous, so this option stays disabled until that engine can be implemented and tested safely.',
-        ),
+        title: Text(V27Strings.of(context).text('crossfade_not_ready')),
+        content: Text(V27Strings.of(context).text('crossfade_explanation')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('OK'),
+            child: Text(V27Strings.of(context).text('ok')),
           ),
         ],
       ),
@@ -897,8 +895,8 @@ class _QueueSettingsSetting extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListTile(
     leading: const Icon(Icons.queue_music),
-    title: const Text('Queue settings'),
-    subtitle: const Text('Repeat the current track and tune Previous behavior.'),
+    title: Text(V27Strings.of(context).text('queue_settings')),
+    subtitle: Text(V27Strings.of(context).text('repeat_description')),
     trailing: const Icon(Icons.chevron_right),
     onTap: () => Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const _QueueSettingsScreen()),
@@ -951,7 +949,7 @@ class _QueueSettingsScreenState extends State<_QueueSettingsScreen> {
       if (!mounted) return;
       setState(() => _repeatCurrent = previous);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not update repeat setting.')),
+        SnackBar(content: Text(V27Strings.of(context).text('could_not_update_repeat'))),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -968,7 +966,7 @@ class _QueueSettingsScreenState extends State<_QueueSettingsScreen> {
       if (!mounted) return;
       setState(() => _restartThreshold = previous);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not update Previous behavior.')),
+        SnackBar(content: Text(V27Strings.of(context).text('could_not_update_previous'))),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -977,26 +975,26 @@ class _QueueSettingsScreenState extends State<_QueueSettingsScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Queue settings')),
+    appBar: AppBar(title: Text(V27Strings.of(context).text('queue_settings'))),
     body: ListView(
       children: [
         SwitchListTile(
           secondary: const Icon(Icons.repeat_one),
-          title: const Text('Repeat current track'),
-          subtitle: const Text('Replay the same track automatically when it ends.'),
+          title: Text(V27Strings.of(context).text('repeat_current')),
+          subtitle: Text(V27Strings.of(context).text('repeat_description')),
           value: _repeatCurrent,
           onChanged: _loaded && !_saving ? _setRepeatCurrent : null,
         ),
         ListTile(
           leading: const Icon(Icons.skip_previous),
-          title: const Text('Restart current track when Previous is pressed'),
-          subtitle: const Text('If the track is past this point, Previous restarts it; otherwise it goes to the previous track.'),
+          title: Text(V27Strings.of(context).text('restart_previous')),
+          subtitle: Text(V27Strings.of(context).text('previous_threshold')),
           trailing: DropdownButton<int>(
             value: const [0, 3, 5, 10].contains(_restartThreshold) ? _restartThreshold : 3,
             onChanged: _loaded && !_saving ? _setRestartThreshold : null,
             items: const [0, 3, 5, 10].map((seconds) => DropdownMenuItem<int>(
               value: seconds,
-              child: Text('$seconds s'),
+              child: Text('$seconds ${V27Strings.of(context).text('seconds_abbrev')}'),
             )).toList(),
           ),
         ),
@@ -1013,8 +1011,8 @@ class _AvoidDuplicateSongsSetting extends ConsumerWidget {
     final state = ref.watch(playlistStoreProvider);
     return SwitchListTile(
       secondary: const Icon(Icons.library_add_check_outlined),
-      title: const Text("Don't allow duplicate songs"),
-      subtitle: const Text('Prevent the same track from being added to a playlist twice.'),
+      title: Text(V27Strings.of(context).text('duplicate_songs')),
+      subtitle: Text(V27Strings.of(context).text('duplicate_songs_description')),
       value: state.avoidDuplicateSongs,
       onChanged: state.isLoading
           ? null
@@ -1029,8 +1027,8 @@ class _ManagePlaylistsSetting extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListTile(
     leading: const Icon(Icons.playlist_play),
-    title: const Text('Manage playlists'),
-    subtitle: const Text('Create playlists, rename them and manage their songs.'),
+    title: Text(V27Strings.of(context).text('manage_playlists')),
+    subtitle: Text(V27Strings.of(context).text('playlist_management_description')),
     trailing: const Icon(Icons.chevron_right),
     onTap: () => Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const _ManagePlaylistsScreen()),
@@ -1059,7 +1057,7 @@ Future<void> _createPlaylistFromUi(BuildContext context, WidgetRef ref) async {
   final created = await ref.read(playlistStoreProvider.notifier).createPlaylist(name);
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(created == null ? 'Playlist name is empty or already used.' : 'Playlist created.')),
+    SnackBar(content: Text(created == null ? V27Strings.of(context).text('playlist_name_invalid') : V27Strings.of(context).text('playlist_created'))),
   );
 }
 
@@ -1083,10 +1081,10 @@ class _ManagePlaylistsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Your playlists'),
+        title: Text(V27Strings.of(context).text('your_playlists')),
         actions: [
           IconButton(
-            tooltip: 'Create playlist',
+            tooltip: V27Strings.of(context).text('create_playlist'),
             icon: const Icon(Icons.add_rounded),
             onPressed: state.isLoading
                 ? null
@@ -1111,7 +1109,7 @@ class _ManagePlaylistsScreen extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'YOUR COLLECTION',
+                              V27Strings.of(context).text('your_collection'),
                               style: TextStyle(
                                 color: Theme.of(context).colorScheme.primary,
                                 fontSize: 11,
@@ -1121,7 +1119,7 @@ class _ManagePlaylistsScreen extends ConsumerWidget {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Made for your mood.',
+                              V27Strings.of(context).text('made_for_mood'),
                               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: -0.7,
@@ -1129,7 +1127,7 @@ class _ManagePlaylistsScreen extends ConsumerWidget {
                             ),
                             const SizedBox(height: 5),
                             Text(
-                              '${state.playlists.length} playlists  ·  ${state.playlists.fold<int>(0, (sum, item) => sum + item.songs.length)} songs saved',
+                              '${state.playlists.length} ${V27Strings.of(context).text('playlists')}  ·  ${state.playlists.fold<int>(0, (sum, item) => sum + item.songs.length)} ${V27Strings.of(context).text('songs_saved')}',
                               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                                   ),
@@ -1222,7 +1220,7 @@ class _ManagePlaylistsScreen extends ConsumerWidget {
                                                 ),
                                                 const SizedBox(height: 6),
                                                 Text(
-                                                  '${playlist.songs.length} ${playlist.songs.length == 1 ? 'song' : 'songs'}',
+                                                  '${playlist.songs.length} ${V27Strings.of(context).text(playlist.songs.length == 1 ? 'song' : 'songs')}',
                                                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                                                       ),
@@ -1240,13 +1238,13 @@ class _ManagePlaylistsScreen extends ConsumerWidget {
                                             ),
                                           ),
                                           PopupMenuButton<String>(
-                                            tooltip: 'Playlist options',
+                                            tooltip: V27Strings.of(context).text('playlist_options'),
                                             icon: const Icon(Icons.more_vert_rounded),
                                             onSelected: (action) async {
                                               if (action == 'rename') {
                                                 final name = await _showPlaylistNameDialog(
                                                   context,
-                                                  title: 'Rename playlist',
+                                                  title: V27Strings.of(context).text('rename_playlist'),
                                                   initialValue: playlist.name,
                                                 );
                                                 if (name == null || !context.mounted) return;
@@ -1254,8 +1252,8 @@ class _ManagePlaylistsScreen extends ConsumerWidget {
                                                 if (!context.mounted) return;
                                                 if (!ok) {
                                                   ScaffoldMessenger.of(context).showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text('Playlist name is empty or already used.'),
+                                                    SnackBar(
+                                                      content: Text(V27Strings.of(context).text('playlist_name_invalid')),
                                                     ),
                                                   );
                                                 }
@@ -1263,9 +1261,9 @@ class _ManagePlaylistsScreen extends ConsumerWidget {
                                                 final confirm = await showDialog<bool>(
                                                   context: context,
                                                   builder: (dialogContext) => AlertDialog(
-                                                    title: const Text('Delete playlist?'),
+                                                    title: Text(V27Strings.of(context).text('delete_playlist_question')),
                                                     content: Text(
-                                                      'Delete “${playlist.name}”? The audio files will not be deleted.',
+                                                      V27Strings.of(context).text('delete_playlist_confirm'),
                                                     ),
                                                     actions: [
                                                       TextButton(
@@ -1274,7 +1272,7 @@ class _ManagePlaylistsScreen extends ConsumerWidget {
                                                       ),
                                                       FilledButton(
                                                         onPressed: () => Navigator.pop(dialogContext, true),
-                                                        child: const Text('Delete'),
+                                                        child: Text(V27Strings.of(context).text('delete')),
                                                       ),
                                                     ],
                                                   ),
@@ -1284,14 +1282,14 @@ class _ManagePlaylistsScreen extends ConsumerWidget {
                                                 }
                                               }
                                             },
-                                            itemBuilder: (_) => const [
+                                            itemBuilder: (_) => [
                                               PopupMenuItem(
                                                 value: 'rename',
                                                 child: Row(
                                                   children: [
                                                     Icon(Icons.edit_outlined, size: 19),
                                                     SizedBox(width: 10),
-                                                    Text('Rename'),
+                                                    Text(V27Strings.of(context).text('rename')),
                                                   ],
                                                 ),
                                               ),
@@ -1301,7 +1299,7 @@ class _ManagePlaylistsScreen extends ConsumerWidget {
                                                   children: [
                                                     Icon(Icons.delete_outline, size: 19),
                                                     SizedBox(width: 10),
-                                                    Text('Delete'),
+                                                    Text(V27Strings.of(context).text('delete')),
                                                   ],
                                                 ),
                                               ),
@@ -1359,14 +1357,14 @@ class _PlaylistEmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 25),
             Text(
-              'Your music, your way.',
+              V27Strings.of(context).text('your_music_your_way'),
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
             ),
             const SizedBox(height: 9),
             Text(
-              'Create your first playlist and collect the tracks you love.',
+              V27Strings.of(context).text('create_playlist_empty_body'),
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1377,7 +1375,7 @@ class _PlaylistEmptyState extends StatelessWidget {
             FilledButton.icon(
               onPressed: onCreate,
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Create playlist'),
+              label: Text(V27Strings.of(context).text('create_playlist')),
             ),
           ],
         ),
@@ -1414,8 +1412,8 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
 
     if (currentPlaylist == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Playlist')),
-        body: const Center(child: Text('This playlist no longer exists.')),
+        appBar: AppBar(title: Text(V27Strings.of(context).text('playlist'))),
+        body: Center(child: Text(V27Strings.of(context).text('playlist_missing'))),
       );
     }
 
@@ -1439,7 +1437,7 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return const Center(child: Text('Could not load playlist tracks.'));
+            return Center(child: Text(V27Strings.of(context).text('playlist_tracks_error')));
           }
 
           final tracks = snapshot.data ?? const <Track>[];
@@ -1470,7 +1468,7 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      'This playlist is waiting for music',
+                      V27Strings.of(context).text('playlist_waiting'),
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w800,
@@ -1478,7 +1476,7 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 7),
                     Text(
-                      'Add tracks from your library to get started.',
+                      V27Strings.of(context).text('add_tracks_prompt'),
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1562,7 +1560,7 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'YOUR PLAYLIST',
+                                        V27Strings.of(context).text('your_playlist_header'),
                                         style: TextStyle(
                                           color: Theme.of(context).colorScheme.primary,
                                           fontSize: 10,
@@ -1582,7 +1580,7 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                                       ),
                                       const SizedBox(height: 5),
                                       Text(
-                                        '${currentPlaylist.songs.length} ${currentPlaylist.songs.length == 1 ? 'track' : 'tracks'}',
+                                        '${currentPlaylist.songs.length} ${V27Strings.of(context).text(currentPlaylist.songs.length == 1 ? 'song' : 'songs')}',
                                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                               color: Theme.of(context).colorScheme.onSurfaceVariant,
                                             ),
@@ -1604,7 +1602,7 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                                         playFrom(firstAvailableIndex, track);
                                       },
                                 icon: const Icon(Icons.play_arrow_rounded),
-                                label: const Text('Play all'),
+                                label: Text(V27Strings.of(context).text('play_all')),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: Theme.of(context).colorScheme.primary,
                                   foregroundColor: Theme.of(context).colorScheme.onPrimary,
@@ -1622,7 +1620,7 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                       Row(
                         children: [
                           Text(
-                            'TRACKS',
+                            V27Strings.of(context).text('tracks_header'),
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.onSurfaceVariant,
                               fontSize: 11,
@@ -1632,7 +1630,7 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                           ),
                           const Spacer(),
                           Text(
-                            '${currentPlaylist.songs.length} total',
+                            '${currentPlaylist.songs.length} ${V27Strings.of(context).text('total_tracks')}',
                             style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
@@ -1719,7 +1717,7 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          track?.title ?? 'Unavailable track',
+                                          track?.title ?? V27Strings.of(context).text('unavailable_track'),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -1732,7 +1730,7 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                                         const SizedBox(height: 4),
                                         Text(
                                           track == null
-                                              ? 'No longer in your library'
+                                              ? V27Strings.of(context).text('no_longer_in_library')
                                               : '${track.artist} • ${track.album}',
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
@@ -1764,7 +1762,7 @@ class _PlaylistDetailsScreen extends ConsumerWidget {
                                   ),
                                   const SizedBox(width: 2),
                                   IconButton(
-                                    tooltip: 'Remove from playlist',
+                                    tooltip: V27Strings.of(context).text('remove_from_playlist'),
                                     visualDensity: VisualDensity.compact,
                                     icon: const Icon(Icons.close_rounded, size: 20),
                                     onPressed: () => ref

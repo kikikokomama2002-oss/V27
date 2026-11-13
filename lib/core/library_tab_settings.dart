@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'localization.dart';
 
 enum LibraryTab {
   home('Home', Icons.home_outlined),
@@ -12,4 +13,14 @@ enum LibraryTab {
 
   final String label;
   final IconData icon;
+
+  String localizedLabel(BuildContext context) =>
+      V27Strings.of(context).text(switch (this) {
+        LibraryTab.home => 'home',
+        LibraryTab.tracks => 'all_tracks',
+        LibraryTab.albums => 'albums',
+        LibraryTab.artists => 'artists',
+        LibraryTab.folders => 'folders',
+        LibraryTab.playlists => 'playlists',
+      });
 }

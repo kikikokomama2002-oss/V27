@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/localization.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/track_artwork.dart';
 import 'now_playing_screen.dart';
@@ -93,7 +94,7 @@ class MiniPlayer extends ConsumerWidget {
                       ),
                     ),
                     IconButton(
-                      tooltip: 'Previous',
+                      tooltip: V27Strings.of(context).text('previous'),
                       visualDensity: VisualDensity.compact,
                       constraints: const BoxConstraints.tightFor(width: 48, height: 48),
                       onPressed: ref.read(playbackControllerProvider.notifier).previous,
@@ -101,7 +102,7 @@ class MiniPlayer extends ConsumerWidget {
                     ),
                     const _MiniPlayerPlayButton(),
                     IconButton(
-                      tooltip: 'Next',
+                      tooltip: V27Strings.of(context).text('next'),
                       visualDensity: VisualDensity.compact,
                       constraints: const BoxConstraints.tightFor(width: 48, height: 48),
                       onPressed: ref.read(playbackControllerProvider.notifier).next,
@@ -131,7 +132,7 @@ class _MiniPlayerPlayButton extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return IconButton(
-      tooltip: isPlaying ? 'Pause' : 'Play',
+      tooltip: V27Strings.of(context).text(isPlaying ? 'pause' : 'play'),
       visualDensity: VisualDensity.compact,
       constraints: const BoxConstraints.tightFor(width: 48, height: 48),
       onPressed: controller.togglePlayPause,

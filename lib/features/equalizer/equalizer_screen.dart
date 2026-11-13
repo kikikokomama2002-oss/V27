@@ -1,6 +1,25 @@
 import 'package:flutter/material.dart';
 import '../../core/theme.dart';
+import '../../core/localization.dart';
 import '../../playback/player_channel.dart';
+
+String _localizedPresetName(BuildContext context, String rawName) {
+  final normalized = rawName.trim().toLowerCase().replaceAll('_', ' ').replaceAll('-', ' ');
+  final key = switch (normalized) {
+    'normal' => 'preset_normal',
+    'classical' || 'classic' => 'preset_classical',
+    'dance' => 'preset_dance',
+    'flat' => 'preset_flat',
+    'folk' => 'preset_folk',
+    'heavy metal' => 'preset_heavy_metal',
+    'hip hop' => 'preset_hip_hop',
+    'jazz' => 'preset_jazz',
+    'pop' => 'preset_pop',
+    'rock' => 'preset_rock',
+    _ => null,
+  };
+  return key == null ? rawName : V27Strings.of(context).text(key);
+}
 
 /// Functional Equalizer screen wired to Android Equalizer/BassBoost.
 class EqualizerScreen extends StatefulWidget {
@@ -40,10 +59,10 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
         _state = state;
         _loading = false;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = 'Could not load equalizer: $e';
+        _error = V27Strings.of(context).text('equalizer_load_error_detail');
         _loading = false;
       });
     }
@@ -127,7 +146,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Equalizer'),
+        title: Text(V27Strings.of(context).text('equalizer')),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 18),
@@ -157,12 +176,12 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
           padding: const EdgeInsets.all(24),
           child: _InfoPanel(
             icon: Icons.error_outline_rounded,
-            title: 'Could not load equalizer',
-            message: _error!,
+            title: V27Strings.of(context).text('could_not_load_equalizer'),
+            message: _error ?? V27Strings.of(context).text('equalizer_load_error_detail'),
             action: FilledButton.icon(
               onPressed: _load,
               icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Try again'),
+              label: Text(V27Strings.of(context).text('try_again')),
             ),
           ),
         ),
@@ -177,9 +196,8 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
           padding: const EdgeInsets.all(24),
           child: _InfoPanel(
             icon: Icons.headphones_rounded,
-            title: 'Audio effects unavailable',
-            message:
-                "This device doesn't support audio equalization, or nothing is loaded in the player yet.",
+            title: V27Strings.of(context).text('audio_effects_unavailable'),
+            message: V27Strings.of(context).text('equalizer_unsupported_detail'),
           ),
         ),
       );
@@ -234,7 +252,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'SOUND CONTROL',
+                      V27Strings.of(context).text('sound_control'),
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.primary,
                         fontSize: 10,
@@ -244,14 +262,14 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      'Shape your sound',
+                      V27Strings.of(context).text('shape_your_sound'),
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.w800,
                           ),
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      enabled ? 'Your equalizer is active' : 'Equalizer is bypassed',
+                      V27Strings.of(context).text(enabled ? 'your_equalizer_active' : 'equalizer_bypassed'),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(context)
                                 .textTheme
@@ -273,13 +291,13 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
         ),
         const SizedBox(height: 26),
         _SectionHeading(
-          title: 'PRESETS',
-          subtitle: 'Quick sound profiles',
-          trailing: '${presets.length} available',
+          title: V27Strings.of(context).text('presets'),
+          subtitle: V27Strings.of(context).text('quick_sound_profiles'),
+          trailing: '${presets.length} ${V27Strings.of(context).text('available')}',
         ),
         const SizedBox(height: 13),
         if (presets.isEmpty)
-          const _MutedMessage('No built-in presets available.')
+          _MutedMessage(V27Strings.of(context).text('no_presets'))
         else
           Wrap(
             spacing: 9,
@@ -287,7 +305,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
             children: [
               for (final preset in presets)
                 ActionChip(
-                  label: Text(preset['name'] as String? ?? '—'),
+                  label: Text(_localizedPresetName(context, preset['name'] as String? ?? '—')),
                   onPressed: enabled
                       ? () => _onPresetSelected(preset['index'] as int)
                       : null,
@@ -309,9 +327,9 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
           ),
         const SizedBox(height: 28),
         _SectionHeading(
-          title: 'FREQUENCY BANDS',
-          subtitle: 'Fine-tune each frequency',
-          trailing: '${bands.length} bands',
+          title: V27Strings.of(context).text('frequency_bands'),
+          subtitle: V27Strings.of(context).text('fine_tune_frequency'),
+          trailing: '${bands.length} ${V27Strings.of(context).text('bands')}',
         ),
         const SizedBox(height: 13),
         Container(
@@ -328,7 +346,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _ScaleLabel('MAX'),
+                  _ScaleLabel(V27Strings.of(context).text('max')),
                   Text(
                     '0 dB',
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -336,7 +354,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
                           fontWeight: FontWeight.w800,
                         ),
                   ),
-                  _ScaleLabel('MAX'),
+                  _ScaleLabel(V27Strings.of(context).text('max')),
                 ],
               ),
               const SizedBox(height: 8),
@@ -361,7 +379,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Drag each slider to adjust its frequency level',
+                V27Strings.of(context).text('frequency_hint'),
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).hintColor,
@@ -373,8 +391,8 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
         if (bassBoostSupported) ...[
           const SizedBox(height: 28),
           _SectionHeading(
-            title: 'BASS BOOST',
-            subtitle: 'Add depth to low frequencies',
+            title: V27Strings.of(context).text('bass_boost'),
+            subtitle: V27Strings.of(context).text('add_depth'),
             trailing: '${(bassBoostStrength / 10).round()}%',
           ),
           const SizedBox(height: 13),
@@ -405,7 +423,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Bass intensity',
+                        V27Strings.of(context).text('bass_intensity'),
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.w700,
                             ),

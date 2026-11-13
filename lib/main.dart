@@ -119,12 +119,12 @@ class _StartupGateState extends ConsumerState<_StartupGate> {
           await WidgetsBinding.instance.endOfFrame;
           await repository.scanAndPersist();
           await repository.requestStartupDeletionReconciliation();
-        } catch (error) {
+        } catch (_) {
           if (mounted) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Initial library scan failed: $error')),
+                SnackBar(content: Text(V27Strings.of(context).text('initial_scan_failed'))),
               );
             });
           }
@@ -133,10 +133,10 @@ class _StartupGateState extends ConsumerState<_StartupGate> {
           // deletion convergence.
         }
       }());
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
-        _startupError = 'Could not start the music library: $e';
+        _startupError = V27Strings.of(context).text('could_not_start_library');
         _ready = false;
       });
     }
@@ -144,6 +144,7 @@ class _StartupGateState extends ConsumerState<_StartupGate> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = V27Strings.of(context);
     if (_startupError != null) {
       return Scaffold(
         body: Center(
@@ -156,7 +157,7 @@ class _StartupGateState extends ConsumerState<_StartupGate> {
                 const SizedBox(height: 16),
                 Text(_startupError!, textAlign: TextAlign.center),
                 const SizedBox(height: 16),
-                FilledButton(onPressed: _bootstrap, child: const Text('Retry')),
+                FilledButton(onPressed: _bootstrap, child: Text(strings.text('retry'))),
               ],
             ),
           ),
@@ -174,20 +175,20 @@ class _StartupGateState extends ConsumerState<_StartupGate> {
               children: [
                 const Icon(Icons.lock_outline, size: 48),
                 const SizedBox(height: 16),
-                const Text(
-                  'Audio permission is required to scan and play your local music.',
+                Text(
+                  strings.text('audio_permission_required'),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: _bootstrap,
-                  child: const Text('Try again'),
+                  child: Text(strings.text('try_again')),
                 ),
                 if (_permissionPermanentlyDenied) ...[
                   const SizedBox(height: 8),
-                  const TextButton(
+                  TextButton(
                     onPressed: openAppSettings,
-                    child: Text('Open app settings'),
+                    child: Text(strings.text('open_settings')),
                   ),
                 ],
               ],

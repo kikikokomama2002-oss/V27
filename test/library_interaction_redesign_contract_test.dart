@@ -21,7 +21,7 @@ void main() {
 
   test('Playlist selection opens a lazy detail page instead of autoplaying', () {
     expect(dashboard, contains('class LibraryPlaylistDetailPage'));
-    expect(dashboard, contains("'Here it is, your playlist!'"));
+    expect(dashboard, contains("text('playlist_intro')"));
     expect(dashboard, contains('ListView.builder('));
     expect(dashboard, contains('playlistTrackAtProvider'));
     expect(dashboard, contains('_openPlaylistDetail(context, playlist)'));
@@ -36,9 +36,9 @@ void main() {
   });
 
   test('Track overflow menu includes every requested action and keeps playlist add', () {
-    expect(screen, contains("Text('Add to playlist')"));
-    for (final label in ['Delete', 'Share', 'Track details', 'Album', 'Artist', 'Set as']) {
-      expect(screen, contains("label: '$label'"));
+    expect(screen, contains("text('add_to_playlist')"));
+    for (final key in ['delete', 'share', 'track_details', 'album', 'artist', 'set_as']) {
+      expect(screen, contains("text('$key')"));
     }
     expect(screen, contains('_deleteTrackFromDevice'));
     expect(screen, contains('_shareTrackFile'));

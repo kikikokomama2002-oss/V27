@@ -1,7 +1,10 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/localization.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../data/db/track.dart';
@@ -138,13 +141,13 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
         });
       } else {
         setState(() {
-          _folderAccessError = 'Folder access was cancelled or not granted.';
+          _folderAccessError = V27Strings.of(context).text('folder_access_cancelled');
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
-        _folderAccessError = 'Could not open folder access: $e';
+        _folderAccessError = V27Strings.of(context).text('could_not_open_folder');
       });
     } finally {
       if (mounted) {
@@ -292,7 +295,7 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
     final dark = theme.brightness == Brightness.dark;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('LYRICS'),
+        title: Text(V27Strings.of(context).text('lyrics_title')),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 18),
@@ -317,8 +320,8 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
                 padding: const EdgeInsets.all(24),
                 child: _LyricsInfoPanel(
                   icon: Icons.cloud_off_rounded,
-                  title: 'Could not load lyrics',
-                  message: '${snapshot.error}',
+                  title: V27Strings.of(context).text('could_not_load_lyrics'),
+                  message: V27Strings.of(context).text('lyrics_load_error_detail'),
                   action: FilledButton.icon(
                     onPressed: () {
                       setState(() {
@@ -334,7 +337,7 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
                       });
                     },
                     icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Try again'),
+                    label: Text(V27Strings.of(context).text('try_again')),
                   ),
                 ),
               ),
@@ -350,10 +353,10 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
                 padding: const EdgeInsets.all(28),
                 child: _LyricsInfoPanel(
                   icon: Icons.lyrics_outlined,
-                  title: 'No lyrics found',
+                  title: V27Strings.of(context).text('no_lyrics_title'),
                   message: result.canRequestFolderAccess
-                      ? 'No embedded lyrics found for this track. If you have a matching .lrc file next to it, grant folder access to find it.'
-                      : 'We checked embedded tags and a sidecar .lrc file. Add lyrics with a tag editor, or place a matching .lrc file next to the song.',
+                      ? V27Strings.of(context).text('embedded_lyrics_missing')
+                      : V27Strings.of(context).text('sidecar_lyrics_missing'),
                   error: _folderAccessError,
                   action: result.canRequestFolderAccess
                       ? FilledButton.icon(
@@ -368,8 +371,8 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
                                 )
                               : const Icon(Icons.folder_open_rounded),
                           label: Text(_requestingFolderAccess
-                              ? 'Opening folder…'
-                              : 'Grant folder access'),
+                              ? V27Strings.of(context).text('checking')
+                              : V27Strings.of(context).text('request_folder_access')),
                         )
                       : null,
                 ),
@@ -543,7 +546,7 @@ class _LyricsTrackHeader extends StatelessWidget {
                   color: synced ? colors.secondary : colors.primary),
               const SizedBox(height: 3),
               Text(
-                synced ? 'SYNCED' : 'LYRICS',
+                synced ? V27Strings.of(context).text('synced') : V27Strings.of(context).text('lyrics_title'),
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       fontSize: 9,
                       letterSpacing: 0.8,
