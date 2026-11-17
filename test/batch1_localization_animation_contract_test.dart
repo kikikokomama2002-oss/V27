@@ -33,6 +33,9 @@ void main() {
         'preset_heavy_metal', 'preset_hip_hop', 'preset_jazz', 'preset_pop',
         'preset_rock', 'detail_title', 'duration', 'file_name', 'storage_volume',
         'media_store_id', 'equalizer_unsupported_detail', 'lyrics_load_error_detail',
+        'eight_d_audio', 'eight_d_effect_description', 'effect_intensity',
+        'rotation_speed', 'eight_d_note', 'media_management', 'media_management_desc',
+        'grant_media_management', 'media_management_enabled', 'media_management_unavailable',
       ]) {
         expect(block, contains("'$key':"), reason: '$code is missing $key');
       }
@@ -52,9 +55,10 @@ void main() {
     expect(main, contains('supportedLocales: v27Languages.map'));
   });
 
-  test('Opening animation uses the extended duration', () {
-    expect(library, contains('Duration(milliseconds: 2600)'));
-    expect(library, contains('_OpeningAnimationOverlay'));
+  test('Current opening animation is removed and remains postponed', () {
+    expect(library, isNot(contains('_OpeningAnimationOverlay')));
+    expect(library, isNot(contains('_openingController')));
+    expect(library, isNot(contains('_showOpeningOverlay')));
   });
 
   test('Main user-facing surfaces are wired to localization', () {

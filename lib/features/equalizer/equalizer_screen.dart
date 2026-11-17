@@ -34,6 +34,11 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
   bool _loading = true;
   String? _error;
   int _mutationGeneration = 0;
+  Map<String, dynamic> _eightDState = const {
+    'enabled': false,
+    'intensity': 0.45,
+    'speedHz': 0.16,
+  };
 
   @override
   void initState() {
@@ -53,19 +58,26 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
       _error = null;
     });
     try {
-      final state = await PlayerChannel.instance.getEqualizerState();
-      if (!mounted) return;
-      setState(() {
-        _state = state;
-        _loading = false;
-      });
+      _eightDState = await PlayerChannel.instance.getEightDAudioSettings();
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _error = V27Strings.of(context).text('equalizer_load_error_detail');
-        _loading = false;
-      });
+      // Keep safe defaults: the 8D card remains available if an older
+      // native APK does not yet expose the new bridge.
     }
+    if (!mounted) return;
+    setState(() => _loading = false);
+
+    Map<String, dynamic>? equalizerState;
+    String? equalizerError;
+    try {
+      equalizerState = await PlayerChannel.instance.getEqualizerState();
+    } catch (_) {
+      equalizerError = V27Strings.of(context).text('equalizer_load_error_detail');
+    }
+    if (!mounted) return;
+    setState(() {
+      _state = equalizerState ?? {'supported': false};
+      _error = equalizerError;
+    });
   }
 
   Future<void> _onBandChanged(int band, int levelMillibel) async {
@@ -141,6 +153,118 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
     }
   }
 
+  Future<void> _setEightDEnabled(bool value) async {
+    setState(() => _eightDState = {..._eightDState, 'enabled': value});
+    try {
+      await PlayerChannel.instance.setEightDAudioEnabled(value);
+    } catch (_) {
+      if (!mounted) return;
+      try {
+        final fresh = await PlayerChannel.instance.getEightDAudioSettings();
+        if (mounted) setState(() => _eightDState = fresh);
+      } catch (_) {}
+    }
+  }
+
+  void _previewEightDIntensity(double value) {
+    setState(() => _eightDState = {..._eightDState, 'intensity': value});
+  }
+
+  Future<void> _setEightDIntensity(double value) async {
+    try {
+      await PlayerChannel.instance.setEightDAudioIntensity(value);
+    } catch (_) {
+      try {
+        final fresh = await PlayerChannel.instance.getEightDAudioSettings();
+        if (mounted) setState(() => _eightDState = fresh);
+      } catch (_) {}
+    }
+  }
+
+  void _previewEightDSpeed(double value) {
+    setState(() => _eightDState = {..._eightDState, 'speedHz': value});
+  }
+
+  Future<void> _setEightDSpeed(double value) async {
+    try {
+      await PlayerChannel.instance.setEightDAudioSpeed(value);
+    } catch (_) {
+      try {
+        final fresh = await PlayerChannel.instance.getEightDAudioSettings();
+        if (mounted) setState(() => _eightDState = fresh);
+      } catch (_) {}
+    }
+  }
+
+  Widget _buildEightDAudioCard(BuildContext context) {
+    final strings = V27Strings.of(context);
+    final enabled = _eightDState['enabled'] as bool? ?? false;
+    final intensity = (_eightDState['intensity'] as num?)?.toDouble() ?? 0.45;
+    final speed = (_eightDState['speedHz'] as num?)?.toDouble() ?? 0.16;
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 17, 18, 15),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(23),
+        border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(Icons.surround_sound_rounded, color: theme.colorScheme.primary),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(strings.text('eight_d_audio'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 3),
+                    Text(strings.text('eight_d_effect_description'), style: theme.textTheme.bodySmall),
+                  ],
+                ),
+              ),
+              Switch(value: enabled, onChanged: _setEightDEnabled),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(strings.text('effect_intensity'), style: theme.textTheme.labelLarge),
+          Slider(
+            min: 0,
+            max: 1,
+            divisions: 20,
+            value: intensity.clamp(0.0, 1.0).toDouble(),
+            onChanged: enabled ? _previewEightDIntensity : null,
+            onChangeEnd: enabled ? _setEightDIntensity : null,
+          ),
+          Text(strings.text('rotation_speed'), style: theme.textTheme.labelLarge),
+          Slider(
+            min: 0.04,
+            max: 0.7,
+            divisions: 22,
+            value: speed.clamp(0.04, 0.7).toDouble(),
+            onChanged: enabled ? _previewEightDSpeed : null,
+            onChangeEnd: enabled ? _setEightDSpeed : null,
+          ),
+          Text(
+            strings.text('eight_d_note'),
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
@@ -170,36 +294,38 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
       );
     }
 
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: _InfoPanel(
-            icon: Icons.error_outline_rounded,
-            title: V27Strings.of(context).text('could_not_load_equalizer'),
-            message: _error ?? V27Strings.of(context).text('equalizer_load_error_detail'),
-            action: FilledButton.icon(
-              onPressed: _load,
-              icon: const Icon(Icons.refresh_rounded),
-              label: Text(V27Strings.of(context).text('try_again')),
-            ),
-          ),
-        ),
+    if (_state == null && _error == null) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(18, 10, 18, 32),
+        children: [
+          _buildEightDAudioCard(context),
+          const SizedBox(height: 22),
+          const LinearProgressIndicator(),
+        ],
       );
     }
 
     final state = _state ?? {};
     final supported = state['supported'] as bool? ?? false;
-    if (!supported) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: _InfoPanel(
-            icon: Icons.headphones_rounded,
-            title: V27Strings.of(context).text('audio_effects_unavailable'),
-            message: V27Strings.of(context).text('equalizer_unsupported_detail'),
+    if (_error != null || !supported) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(18, 10, 18, 32),
+        children: [
+          _buildEightDAudioCard(context),
+          const SizedBox(height: 22),
+          _InfoPanel(
+            icon: _error != null ? Icons.error_outline_rounded : Icons.headphones_rounded,
+            title: V27Strings.of(context).text(_error != null ? 'could_not_load_equalizer' : 'audio_effects_unavailable'),
+            message: _error ?? V27Strings.of(context).text('equalizer_unsupported_detail'),
+            action: _error != null
+                ? FilledButton.icon(
+                    onPressed: _load,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: Text(V27Strings.of(context).text('try_again')),
+                  )
+                : null,
           ),
-        ),
+        ],
       );
     }
 
@@ -213,6 +339,8 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 10, 18, 32),
       children: [
+        _buildEightDAudioCard(context),
+        const SizedBox(height: 22),
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(

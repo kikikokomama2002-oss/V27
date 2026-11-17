@@ -41,6 +41,9 @@ void main() {
     expect(source, contains('physics: const _LibraryTabScrollPhysics()'));
     expect(source, contains('double get minFlingDistance => 7'));
     expect(source, contains('double get minFlingVelocity => 70'));
+    expect(source, contains('onPointerDown: _onLibraryPointerDown'));
+    expect(source, contains('onPointerUp: _onLibraryPointerUp'));
+    expect(source, contains('Duration(milliseconds: 340)'));
   });
 
   test('Android deletion stays scoped to MediaStore user confirmation', () {
@@ -49,7 +52,11 @@ void main() {
     expect(native, contains('MediaStore.createDeleteRequest(context.contentResolver, listOf(uri))'));
     expect(native, contains('Only MediaStore content URIs can be deleted'));
     expect(manifest, contains('android.permission.READ_MEDIA_AUDIO'));
+    expect(manifest, contains('android.permission.MANAGE_MEDIA'));
     expect(manifest, isNot(contains('MANAGE_EXTERNAL_STORAGE')));
+    expect(native, contains('MediaStore.canManageMedia(context)'));
+    expect(native, contains('Settings.ACTION_REQUEST_MANAGE_MEDIA'));
+    expect(native, contains('getMediaManagementAccessState'));
     final permissions = read('lib/core/permissions.dart');
     final startup = read('lib/main.dart');
     expect(permissions, contains('Permission.audio.request()'));

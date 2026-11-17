@@ -7,6 +7,11 @@ import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.session.SessionResult
 import androidx.media3.exoplayer.ExoPlayer
 import io.flutter.plugin.common.MethodChannel
@@ -49,6 +54,7 @@ object PlayerHolder {
     // event) independent of any single MethodChannel call's lifetime.
     private val queueScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val queueWindowController = QueueWindowController(queueScope)
+    private val eightDAudioProcessor = EightDAudioProcessor()
 
     /** Bounds queued notification transport intents while one is executing. */
     private const val MAX_PENDING_TRANSPORT_INTENTS = 8
@@ -65,6 +71,11 @@ object PlayerHolder {
     private const val EXTERNAL_DEVICE_START_KEY = "external_device_start_enabled"
     private const val REPEAT_CURRENT_TRACK_KEY = "repeat_current_track_enabled"
     private const val PREVIOUS_RESTART_THRESHOLD_SECONDS_KEY = "previous_restart_threshold_seconds"
+    private const val EIGHT_D_ENABLED_KEY = "eight_d_audio_enabled"
+    private const val EIGHT_D_INTENSITY_KEY = "eight_d_audio_intensity"
+    private const val EIGHT_D_SPEED_KEY = "eight_d_audio_speed_hz"
+    private const val DEFAULT_EIGHT_D_INTENSITY = 0.45f
+    private const val DEFAULT_EIGHT_D_SPEED_HZ = 0.16f
     private val sleepTimerHandler = Handler(Looper.getMainLooper())
     private var sleepTimerDeadlineMs: Long? = null
     private var sleepTimerContext: Context? = null
@@ -129,8 +140,31 @@ object PlayerHolder {
      */
     fun peek(): ExoPlayer? = _player
 
+    @OptIn(UnstableApi::class)
     private fun buildPlayer(context: Context): ExoPlayer {
-        val player = ExoPlayer.Builder(context)
+        val playbackPrefs = context
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+        eightDAudioProcessor.update(
+            enabled = playbackPrefs.getBoolean(EIGHT_D_ENABLED_KEY, false),
+            intensity = playbackPrefs.getFloat(EIGHT_D_INTENSITY_KEY, DEFAULT_EIGHT_D_INTENSITY),
+            speedHz = playbackPrefs.getFloat(EIGHT_D_SPEED_KEY, DEFAULT_EIGHT_D_SPEED_HZ),
+        )
+        val renderersFactory = object : DefaultRenderersFactory(context) {
+            @OptIn(UnstableApi::class)
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioOutputPlaybackParams: Boolean,
+            ): AudioSink? {
+                return DefaultAudioSink.Builder(context)
+                    // The PCM processor must run, so use the integer PCM path.
+                    .setEnableFloatOutput(false)
+                    .setEnableAudioTrackPlaybackParams(enableAudioOutputPlaybackParams)
+                    .setAudioProcessors(arrayOf<AudioProcessor>(eightDAudioProcessor))
+                    .build()
+            }
+        }
+        val player = ExoPlayer.Builder(context, renderersFactory)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -140,8 +174,6 @@ object PlayerHolder {
             )
             .setSkipSilenceEnabled(false)
             .build()
-        val playbackPrefs = context
-            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
         val savedSpeed = playbackPrefs
             .getFloat("playback_speed", 1.0f)
             .coerceIn(0.5f, 2.0f)
@@ -151,6 +183,57 @@ object PlayerHolder {
         player.setSkipSilenceEnabled(skipSilenceEnabled)
         player.repeatMode = if (repeatCurrentTrack) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         return player
+    }
+
+    fun getEightDAudioSettings(context: Context): Map<String, Any> {
+        val prefs = context.applicationContext
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+        return mapOf(
+            "enabled" to prefs.getBoolean(EIGHT_D_ENABLED_KEY, false),
+            "intensity" to prefs.getFloat(EIGHT_D_INTENSITY_KEY, DEFAULT_EIGHT_D_INTENSITY),
+            "speedHz" to prefs.getFloat(EIGHT_D_SPEED_KEY, DEFAULT_EIGHT_D_SPEED_HZ),
+        )
+    }
+
+    @Synchronized
+    fun setEightDAudioEnabled(context: Context, enabled: Boolean) {
+        context.applicationContext
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .edit().putBoolean(EIGHT_D_ENABLED_KEY, enabled).apply()
+        val current = getEightDAudioSettings(context)
+        eightDAudioProcessor.update(
+            enabled = enabled,
+            intensity = current["intensity"] as Float,
+            speedHz = current["speedHz"] as Float,
+        )
+    }
+
+    @Synchronized
+    fun setEightDAudioIntensity(context: Context, intensity: Float) {
+        val safe = intensity.coerceIn(0f, 1f)
+        context.applicationContext
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .edit().putFloat(EIGHT_D_INTENSITY_KEY, safe).apply()
+        val current = getEightDAudioSettings(context)
+        eightDAudioProcessor.update(
+            enabled = current["enabled"] as Boolean,
+            intensity = safe,
+            speedHz = current["speedHz"] as Float,
+        )
+    }
+
+    @Synchronized
+    fun setEightDAudioSpeed(context: Context, speedHz: Float) {
+        val safe = speedHz.coerceIn(0.04f, 0.7f)
+        context.applicationContext
+            .getSharedPreferences(PLAYBACK_SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .edit().putFloat(EIGHT_D_SPEED_KEY, safe).apply()
+        val current = getEightDAudioSettings(context)
+        eightDAudioProcessor.update(
+            enabled = current["enabled"] as Boolean,
+            intensity = current["intensity"] as Float,
+            speedHz = safe,
+        )
     }
 
     /**

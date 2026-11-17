@@ -556,6 +556,46 @@ class PlayerChannel {
       _method.invokeMethod('cancelEqualizerWait');
 
   // -------------------------------------------------------------------
+  // Optional Android media-management special access (Android 12+).
+  // This only suppresses repetitive per-file confirmation; the delete path
+  // remains scoped to MediaStore content URIs and createDeleteRequest().
+  // -------------------------------------------------------------------
+
+  Future<Map<String, dynamic>> getMediaManagementAccessState() async {
+    final result = await _method.invokeMethod<Map<dynamic, dynamic>>(
+      'getMediaManagementAccessState',
+    );
+    return (result ?? {}).cast<String, dynamic>();
+  }
+
+  Future<bool> requestMediaManagementAccess() async {
+    final result = await _method.invokeMethod<bool>(
+      'requestMediaManagementAccess',
+    );
+    return result ?? false;
+  }
+
+  // -------------------------------------------------------------------
+  // 8D-style stereo motion DSP (native Media3 PCM processor).
+  // -------------------------------------------------------------------
+
+  Future<Map<String, dynamic>> getEightDAudioSettings() async {
+    final result = await _method.invokeMethod<Map<dynamic, dynamic>>(
+      'getEightDAudioSettings',
+    );
+    return (result ?? {}).cast<String, dynamic>();
+  }
+
+  Future<void> setEightDAudioEnabled(bool enabled) =>
+      _method.invokeMethod('setEightDAudioEnabled', {'enabled': enabled});
+
+  Future<void> setEightDAudioIntensity(double intensity) =>
+      _method.invokeMethod('setEightDAudioIntensity', {'intensity': intensity});
+
+  Future<void> setEightDAudioSpeed(double speedHz) =>
+      _method.invokeMethod('setEightDAudioSpeed', {'speedHz': speedHz});
+
+  // -------------------------------------------------------------------
   // Track file actions
   // -------------------------------------------------------------------
 

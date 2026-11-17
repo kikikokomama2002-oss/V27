@@ -28,10 +28,11 @@ void main() {
     expect(dashboard, contains('startTrack: track'));
   });
 
-  test('Library entry presents the split-logo opening animation', () {
-    expect(screen, contains('class _OpeningAnimationOverlay'));
-    expect(screen, contains('AnimationController('));
-    expect(screen, contains("'assets/v27_icon.png'"));
+  test('Library entry no longer presents the deferred opening animation', () {
+    expect(screen, isNot(contains('class _OpeningAnimationOverlay')));
+    expect(screen, isNot(contains('_openingController')));
+    expect(screen, isNot(contains('_showOpeningOverlay')));
+    // The launcher icon remains a normal app asset; only its opening overlay is deferred.
     expect(pubspec, contains('- assets/v27_icon.png'));
   });
 

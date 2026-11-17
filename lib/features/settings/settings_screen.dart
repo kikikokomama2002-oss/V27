@@ -675,6 +675,9 @@ class _PermissionsDialogState extends State<_PermissionsDialog> with WidgetsBind
   String _audioStatus = 'checking';
   String _notificationStatus = 'checking';
   bool _busy = false;
+  bool _mediaManagementSupported = false;
+  bool _mediaManagementGranted = false;
+  bool _mediaManagementBusy = false;
 
   @override
   void initState() {
@@ -709,17 +712,40 @@ class _PermissionsDialogState extends State<_PermissionsDialog> with WidgetsBind
       final audio = await Permission.audio.status;
       final storage = await Permission.storage.status;
       final notifications = await Permission.notification.status;
+      final mediaManagement = await PlayerChannel.instance.getMediaManagementAccessState();
       if (!mounted) return;
       setState(() {
         _audioStatus = _describe(audio.isGranted ? audio : storage);
         _notificationStatus = _describe(notifications);
+        _mediaManagementSupported = mediaManagement['supported'] == true;
+        _mediaManagementGranted = mediaManagement['granted'] == true;
       });
     } catch (_) {
       if (mounted) {
         setState(() {
           _audioStatus = 'could_not_read_status';
           _notificationStatus = 'could_not_read_status';
+          _mediaManagementSupported = false;
+          _mediaManagementGranted = false;
         });
+      }
+    }
+  }
+
+  Future<void> _requestMediaManagementAccess() async {
+    setState(() => _mediaManagementBusy = true);
+    try {
+      await PlayerChannel.instance.requestMediaManagementAccess();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(V27Strings.of(context).text('could_not_open_system_settings'))),
+        );
+      }
+    } finally {
+      if (mounted) {
+        await _refresh();
+        if (mounted) setState(() => _mediaManagementBusy = false);
       }
     }
   }
@@ -761,6 +787,28 @@ class _PermissionsDialogState extends State<_PermissionsDialog> with WidgetsBind
             title: Text(V27Strings.of(context).text('notifications')),
             subtitle: Text(V27Strings.of(context).text(_notificationStatus)),
           ),
+          const Divider(height: 20),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.delete_sweep_outlined),
+            title: Text(V27Strings.of(context).text('media_management')),
+            subtitle: Text(V27Strings.of(context).text(
+              !_mediaManagementSupported
+                  ? 'media_management_unavailable'
+                  : _mediaManagementGranted
+                      ? 'media_management_enabled'
+                      : 'media_management_desc',
+            )),
+          ),
+          if (_mediaManagementSupported && !_mediaManagementGranted)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _mediaManagementBusy ? null : _requestMediaManagementAccess,
+                icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                label: Text(V27Strings.of(context).text('grant_media_management')),
+              ),
+            ),
           const SizedBox(height: 4),
           Text(V27Strings.of(context).text('notification_optional')),
         ],

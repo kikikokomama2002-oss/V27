@@ -123,59 +123,122 @@ class LibraryDashboard extends ConsumerWidget {
       key: const PageStorageKey<String>('v27-library-home'),
       physics: const BouncingScrollPhysics(),
       slivers: [
-        SliverToBoxAdapter(
-          child: _SpeedDialSection(
-            trackCount: trackCount,
-            albumCount: albumsState.totalCount,
-            artistCount: artistsState.totalCount,
-            playlistCount: playlistState.playlists.length,
-            onSelectTab: onSelectTab,
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: _QuickPicksSection(
-            onSelectAll: () => onSelectTab(LibraryTab.tracks),
-            onTrackAction: onTrackAction,
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: _DashboardGroupShelf(
-            title: V27Strings.of(context).text('albums_in_library'),
-            field: GroupField.album,
-            notifier: albumsNotifier,
-            totalCount: albumsState.totalCount,
-            countError: albumsState.countError,
-            onSeeAll: () => onSelectTab(LibraryTab.albums),
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: _DashboardGroupShelf(
-            title: V27Strings.of(context).text('explore_artists'),
-            field: GroupField.artist,
-            notifier: artistsNotifier,
-            totalCount: artistsState.totalCount,
-            countError: artistsState.countError,
-            onSeeAll: () => onSelectTab(LibraryTab.artists),
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: _DashboardPlaylistsShelf(
-            playlistState: playlistState,
-            onSeeAll: () => onSelectTab(LibraryTab.playlists),
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: _DashboardGroupShelf(
-            title: V27Strings.of(context).text('browse_folders'),
-            field: GroupField.folder,
-            notifier: foldersNotifier,
-            totalCount: foldersState.totalCount,
-            countError: foldersState.countError,
-            onSeeAll: () => onSelectTab(LibraryTab.folders),
-          ),
+        SliverList(
+          delegate: SliverChildListDelegate([
+            _ScrollRevealSection(
+              index: 0,
+              child: _SpeedDialSection(
+                trackCount: trackCount,
+                albumCount: albumsState.totalCount,
+                artistCount: artistsState.totalCount,
+                playlistCount: playlistState.playlists.length,
+                onSelectTab: onSelectTab,
+              ),
+            ),
+            _ScrollRevealSection(
+              index: 1,
+              child: _QuickPicksSection(
+                onSelectAll: () => onSelectTab(LibraryTab.tracks),
+                onTrackAction: onTrackAction,
+              ),
+            ),
+            _ScrollRevealSection(
+              index: 2,
+              child: _DashboardGroupShelf(
+                title: V27Strings.of(context).text('albums_in_library'),
+                field: GroupField.album,
+                notifier: albumsNotifier,
+                totalCount: albumsState.totalCount,
+                countError: albumsState.countError,
+                onSeeAll: () => onSelectTab(LibraryTab.albums),
+              ),
+            ),
+            _ScrollRevealSection(
+              index: 3,
+              child: _DashboardGroupShelf(
+                title: V27Strings.of(context).text('explore_artists'),
+                field: GroupField.artist,
+                notifier: artistsNotifier,
+                totalCount: artistsState.totalCount,
+                countError: artistsState.countError,
+                onSeeAll: () => onSelectTab(LibraryTab.artists),
+              ),
+            ),
+            _ScrollRevealSection(
+              index: 4,
+              child: _DashboardPlaylistsShelf(
+                playlistState: playlistState,
+                onSeeAll: () => onSelectTab(LibraryTab.playlists),
+              ),
+            ),
+            _ScrollRevealSection(
+              index: 5,
+              child: _DashboardGroupShelf(
+                title: V27Strings.of(context).text('browse_folders'),
+                field: GroupField.folder,
+                notifier: foldersNotifier,
+                totalCount: foldersState.totalCount,
+                countError: foldersState.countError,
+                onSeeAll: () => onSelectTab(LibraryTab.folders),
+              ),
+            ),
+          ]),
         ),
         const SliverToBoxAdapter(child: SizedBox(height: 22)),
       ],
+    );
+  }
+}
+
+class _ScrollRevealSection extends StatefulWidget {
+  const _ScrollRevealSection({required this.index, required this.child});
+
+  final int index;
+  final Widget child;
+
+  @override
+  State<_ScrollRevealSection> createState() => _ScrollRevealSectionState();
+}
+
+class _ScrollRevealSectionState extends State<_ScrollRevealSection>
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+  late final Animation<Offset> _position;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 480),
+    );
+    final curved = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+    _opacity = Tween<double>(begin: 0, end: 1).animate(curved);
+    _position = Tween<Offset>(
+      begin: const Offset(0, 0.055),
+      end: Offset.zero,
+    ).animate(curved);
+    Future<void>.delayed(Duration(milliseconds: (widget.index * 75).clamp(0, 375).toInt()), () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return FadeTransition(
+      opacity: _opacity,
+      child: SlideTransition(position: _position, child: widget.child),
     );
   }
 }

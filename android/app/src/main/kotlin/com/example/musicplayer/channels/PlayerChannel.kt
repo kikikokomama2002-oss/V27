@@ -573,6 +573,58 @@ class PlayerChannel(
         val result = trackResult(rawResult)
         if (disposed) return
         when (call.method) {
+            "getMediaManagementAccessState" -> {
+                val supported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                val granted = supported && MediaStore.canManageMedia(context)
+                result.success(mapOf("supported" to supported, "granted" to granted))
+            }
+
+            "requestMediaManagementAccess" -> {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                    result.success(false)
+                    return
+                }
+                try {
+                    val intent = Intent(Settings.ACTION_REQUEST_MANAGE_MEDIA).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                    result.success(true)
+                } catch (e: Exception) {
+                    result.error("MEDIA_MANAGEMENT_SETTINGS_FAILED", e.message, null)
+                }
+            }
+
+            "getEightDAudioSettings" -> {
+                result.success(PlayerHolder.getEightDAudioSettings(context))
+            }
+
+            "setEightDAudioEnabled" -> {
+                val enabled = call.argument<Boolean>("enabled") ?: false
+                PlayerHolder.setEightDAudioEnabled(context, enabled)
+                result.success(null)
+            }
+
+            "setEightDAudioIntensity" -> {
+                val intensity = call.argument<Number>("intensity")?.toFloat()
+                if (intensity == null || !intensity.isFinite()) {
+                    result.error("INVALID_EIGHT_D_INTENSITY", "intensity must be finite", null)
+                    return
+                }
+                PlayerHolder.setEightDAudioIntensity(context, intensity)
+                result.success(null)
+            }
+
+            "setEightDAudioSpeed" -> {
+                val speedHz = call.argument<Number>("speedHz")?.toFloat()
+                if (speedHz == null || !speedHz.isFinite()) {
+                    result.error("INVALID_EIGHT_D_SPEED", "speedHz must be finite", null)
+                    return
+                }
+                PlayerHolder.setEightDAudioSpeed(context, speedHz)
+                result.success(null)
+            }
             "commitDeletionObservationBaseline" -> {
                 try {
                     val epoch = call.argument<String>("epoch")?.trim()

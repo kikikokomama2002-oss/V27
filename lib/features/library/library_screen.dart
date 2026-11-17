@@ -35,8 +35,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   late final Debouncer _searchDebounce;
   late final FocusNode _searchFocusNode;
   late final TextEditingController _searchController;
-  late final AnimationController _openingController;
-  bool _showOpeningOverlay = true;
+  int? _swipePointer;
+  Offset? _swipeStartPosition;
+  int? _swipeStartIndex;
 
   @override
   void initState() {
@@ -46,15 +47,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     _tabController = TabController(length: _visibleTabs.length, vsync: this)
       ..addListener(_handleTabChange);
     _searchDebounce = Debouncer(const Duration(milliseconds: 250));
-    _openingController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2600),
-    )..addStatusListener((status) {
-        if (status == AnimationStatus.completed && mounted) {
-          setState(() => _showOpeningOverlay = false);
-        }
-      });
-    _openingController.forward();
   }
 
   void _handleTabChange() {
@@ -67,6 +59,52 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   void _selectTab(LibraryTab tab) {
     final index = _visibleTabs.indexOf(tab);
     if (index >= 0) _tabController.animateTo(index);
+  }
+
+  void _onLibraryPointerDown(PointerDownEvent event) {
+    // Home contains horizontally-scrolling shelves. Do not interpret those
+    // shelf gestures as tab navigation.
+    if (_searchFocusNode.hasFocus || _tabController.index == 0) return;
+    _swipePointer = event.pointer;
+    _swipeStartPosition = event.position;
+    _swipeStartIndex = _tabController.index;
+  }
+
+  void _onLibraryPointerUp(PointerUpEvent event) {
+    if (_swipePointer != event.pointer) return;
+    final start = _swipeStartPosition;
+    final startIndex = _swipeStartIndex;
+    _clearLibraryPointer();
+    if (start == null || startIndex == null || !mounted) return;
+    final dx = event.position.dx - start.dx;
+    final dy = event.position.dy - start.dy;
+    if (dx.abs() < 54 || dx.abs() < dy.abs() * 1.25) return;
+
+    // Let the native TabBarView/PageView settle first. Only provide a manual
+    // fallback when its gesture recognizer did not change the selected page.
+    Future<void>.delayed(const Duration(milliseconds: 340), () {
+      if (!mounted || _searchFocusNode.hasFocus ||
+          _tabController.index != startIndex) return;
+      final direction = dx < 0 ? 1 : -1;
+      final target = (startIndex + direction).clamp(0, _visibleTabs.length - 1).toInt();
+      if (target != startIndex) {
+        _tabController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
+  }
+
+  void _onLibraryPointerCancel(PointerCancelEvent event) {
+    if (_swipePointer == event.pointer) _clearLibraryPointer();
+  }
+
+  void _clearLibraryPointer() {
+    _swipePointer = null;
+    _swipeStartPosition = null;
+    _swipeStartIndex = null;
   }
 
   Future<void> _manualRescan() async {
@@ -93,7 +131,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     _searchController.dispose();
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
-    _openingController.dispose();
     super.dispose();
   }
 
@@ -110,10 +147,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             ? strings.text('good_afternoon')
             : strings.text('good_evening');
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Scaffold(
+    return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
@@ -254,24 +288,23 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                 ),
               ),
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                physics: const _LibraryTabScrollPhysics(),
-                dragStartBehavior: DragStartBehavior.down,
-                children: _visibleTabs.map(_pageForTab).toList(growable: false),
+              child: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: _onLibraryPointerDown,
+                onPointerUp: _onLibraryPointerUp,
+                onPointerCancel: _onLibraryPointerCancel,
+                child: TabBarView(
+                  controller: _tabController,
+                  physics: const _LibraryTabScrollPhysics(),
+                  dragStartBehavior: DragStartBehavior.down,
+                  children: _visibleTabs.map(_pageForTab).toList(growable: false),
+                ),
               ),
             ),
             const MiniPlayer(),
           ],
         ),
       ),
-    ),
-        if (_showOpeningOverlay)
-          _OpeningAnimationOverlay(
-            controller: _openingController,
-            backgroundColor: theme.scaffoldBackgroundColor,
-          ),
-      ],
     );
   }
 
@@ -315,114 +348,6 @@ class _LibraryTabScrollPhysics extends PageScrollPhysics {
   @override
   _LibraryTabScrollPhysics applyTo(ScrollPhysics? ancestor) =>
       _LibraryTabScrollPhysics(parent: buildParent(ancestor));
-}
-
-class _OpeningAnimationOverlay extends StatelessWidget {
-  const _OpeningAnimationOverlay({required this.controller, required this.backgroundColor});
-
-  final Animation<double> controller;
-  final Color backgroundColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, child) {
-        final progress = Curves.easeInOutCubic.transform(
-          ((controller.value - 0.12) / 0.88).clamp(0.0, 1.0).toDouble(),
-        );
-        return IgnorePointer(
-          child: Opacity(
-            opacity: (1 - progress).clamp(0.0, 1.0),
-            child: ColoredBox(
-              color: backgroundColor,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 190,
-                      height: 190,
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Positioned(
-                            top: 0,
-                            left: 0,
-                            child: Transform.translate(
-                              offset: Offset(0, -150 * progress),
-                              child: SizedBox(
-                                width: 190,
-                                height: 95,
-                                child: ClipRect(
-                                  child: OverflowBox(
-                                    alignment: Alignment.topCenter,
-                                    minWidth: 190,
-                                    maxWidth: 190,
-                                    minHeight: 190,
-                                    maxHeight: 190,
-                                    child: Image.asset(
-                                      'assets/v27_icon.png',
-                                      width: 190,
-                                      height: 190,
-                                      fit: BoxFit.fill,
-                                      filterQuality: FilterQuality.high,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: 95,
-                            left: 0,
-                            child: Transform.translate(
-                              offset: Offset(0, 150 * progress),
-                              child: SizedBox(
-                                width: 190,
-                                height: 95,
-                                child: ClipRect(
-                                  child: OverflowBox(
-                                    alignment: Alignment.topCenter,
-                                    minWidth: 190,
-                                    maxWidth: 190,
-                                    minHeight: 190,
-                                    maxHeight: 190,
-                                    child: Transform.translate(
-                                      offset: const Offset(0, -95),
-                                      child: Image.asset(
-                                        'assets/v27_icon.png',
-                                        width: 190,
-                                        height: 190,
-                                        fit: BoxFit.fill,
-                                        filterQuality: FilterQuality.high,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 19),
-                    Text(
-                      'V27 PULSE',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            letterSpacing: 4.2,
-                            fontWeight: FontWeight.w900,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
 }
 
 /// Flat "Tracks" tab, backed by [tracksPagingProvider] (FIX #1: a

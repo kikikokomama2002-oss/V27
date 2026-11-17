@@ -2,8 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
+    <!-- Optional Android 12+ special access: suppresses repeated confirmation
+         for MediaStore delete requests after the user explicitly enables it. -->
+    <uses-permission android:name="android.permission.MANAGE_MEDIA" />
+    <!-- Legacy read permission declaration is retained for Android media-management
+         special-access compatibility; Android 13+ reads audio via READ_MEDIA_AUDIO. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
