@@ -36,14 +36,29 @@ void main() {
     }
   });
 
-  test('Library tab view uses responsive page swipe physics', () {
+  test('Library tabs use native page swipes without delayed pointer fallback', () {
     final source = read('lib/features/library/library_screen.dart');
-    expect(source, contains('physics: const _LibraryTabScrollPhysics()'));
-    expect(source, contains('double get minFlingDistance => 7'));
-    expect(source, contains('double get minFlingVelocity => 70'));
-    expect(source, contains('onPointerDown: _onLibraryPointerDown'));
-    expect(source, contains('onPointerUp: _onLibraryPointerUp'));
-    expect(source, contains('Duration(milliseconds: 340)'));
+    expect(source, contains('physics: const PageScrollPhysics('));
+    expect(source, contains('parent: BouncingScrollPhysics()'));
+    expect(source, contains('animationDuration: const Duration(milliseconds: 280)'));
+    expect(source, contains('curve: Curves.easeOutCubic'));
+    expect(source, isNot(contains('_onLibraryPointerDown')));
+    expect(source, isNot(contains('Duration(milliseconds: 340)')));
+    expect(source, isNot(contains('_LibraryTabScrollPhysics')));
+  });
+
+  test('Tab animation rebuilds only when the selected page index changes', () {
+    final source = read('lib/features/library/library_screen.dart');
+    expect(source, contains('if (nextIndex == _selectedTabIndex) return;'));
+    expect(source, contains('final nextIndex = _tabController.index;'));
+  });
+
+  test('Dashboard scroll reveals are short, staggered and respect reduced motion', () {
+    final source = read('lib/features/library/library_dashboard.dart');
+    expect(source, contains('Duration(milliseconds: 360)'));
+    expect(source, contains('widget.index * 55'));
+    expect(source, contains('MediaQuery.maybeOf(context)?.disableAnimations'));
+    expect(source, contains('_controller.value = 1'));
   });
 
   test('Android deletion stays scoped to MediaStore user confirmation', () {

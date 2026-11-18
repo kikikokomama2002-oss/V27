@@ -205,23 +205,44 @@ class _ScrollRevealSectionState extends State<_ScrollRevealSection>
   late final AnimationController _controller;
   late final Animation<double> _opacity;
   late final Animation<Offset> _position;
+  bool _hasStarted = false;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 480),
+      duration: const Duration(milliseconds: 360),
     );
     final curved = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
     _opacity = Tween<double>(begin: 0, end: 1).animate(curved);
     _position = Tween<Offset>(
-      begin: const Offset(0, 0.055),
+      begin: const Offset(0, 0.035),
       end: Offset.zero,
     ).animate(curved);
-    Future<void>.delayed(Duration(milliseconds: (widget.index * 75).clamp(0, 375).toInt()), () {
-      if (mounted) _controller.forward();
-    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_hasStarted) return;
+    _hasStarted = true;
+
+    // Respect the system accessibility preference and avoid running
+    // decorative motion when animations are disabled.
+    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+      _controller.value = 1;
+      return;
+    }
+
+    // Sliver children are created as they approach the viewport, so this
+    // stagger naturally reveals sections as the user scrolls down.
+    Future<void>.delayed(
+      Duration(milliseconds: (widget.index * 55).clamp(0, 275).toInt()),
+      () {
+        if (mounted) _controller.forward();
+      },
+    );
   }
 
   @override

@@ -35,22 +35,30 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   late final Debouncer _searchDebounce;
   late final FocusNode _searchFocusNode;
   late final TextEditingController _searchController;
-  int? _swipePointer;
-  Offset? _swipeStartPosition;
-  int? _swipeStartIndex;
+  int _selectedTabIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _searchFocusNode = FocusNode();
     _searchController = TextEditingController(text: ref.read(searchQueryProvider));
-    _tabController = TabController(length: _visibleTabs.length, vsync: this)
-      ..addListener(_handleTabChange);
+    _tabController = TabController(
+      length: _visibleTabs.length,
+      vsync: this,
+      animationDuration: const Duration(milliseconds: 280),
+    )..addListener(_handleTabChange);
     _searchDebounce = Debouncer(const Duration(milliseconds: 250));
   }
 
   void _handleTabChange() {
-    if (_visibleTabs[_tabController.index] != LibraryTab.tracks) {
+    // TabController notifies on every animation tick. Rebuild the screen only
+    // when the selected index actually changes, not for every interpolated
+    // page position during a swipe or tab transition.
+    final nextIndex = _tabController.index;
+    if (nextIndex == _selectedTabIndex) return;
+    _selectedTabIndex = nextIndex;
+
+    if (_visibleTabs[nextIndex] != LibraryTab.tracks) {
       _searchFocusNode.unfocus();
     }
     if (mounted) setState(() {});
@@ -58,53 +66,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
   void _selectTab(LibraryTab tab) {
     final index = _visibleTabs.indexOf(tab);
-    if (index >= 0) _tabController.animateTo(index);
-  }
-
-  void _onLibraryPointerDown(PointerDownEvent event) {
-    // Home contains horizontally-scrolling shelves. Do not interpret those
-    // shelf gestures as tab navigation.
-    if (_searchFocusNode.hasFocus || _tabController.index == 0) return;
-    _swipePointer = event.pointer;
-    _swipeStartPosition = event.position;
-    _swipeStartIndex = _tabController.index;
-  }
-
-  void _onLibraryPointerUp(PointerUpEvent event) {
-    if (_swipePointer != event.pointer) return;
-    final start = _swipeStartPosition;
-    final startIndex = _swipeStartIndex;
-    _clearLibraryPointer();
-    if (start == null || startIndex == null || !mounted) return;
-    final dx = event.position.dx - start.dx;
-    final dy = event.position.dy - start.dy;
-    if (dx.abs() < 54 || dx.abs() < dy.abs() * 1.25) return;
-
-    // Let the native TabBarView/PageView settle first. Only provide a manual
-    // fallback when its gesture recognizer did not change the selected page.
-    Future<void>.delayed(const Duration(milliseconds: 340), () {
-      if (!mounted || _searchFocusNode.hasFocus ||
-          _tabController.index != startIndex) return;
-      final direction = dx < 0 ? 1 : -1;
-      final target = (startIndex + direction).clamp(0, _visibleTabs.length - 1).toInt();
-      if (target != startIndex) {
-        _tabController.animateTo(
-          target,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-        );
-      }
-    });
-  }
-
-  void _onLibraryPointerCancel(PointerCancelEvent event) {
-    if (_swipePointer == event.pointer) _clearLibraryPointer();
-  }
-
-  void _clearLibraryPointer() {
-    _swipePointer = null;
-    _swipeStartPosition = null;
-    _swipeStartIndex = null;
+    if (index >= 0 && index != _tabController.index) {
+      _tabController.animateTo(
+        index,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   Future<void> _manualRescan() async {
@@ -288,17 +256,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                 ),
               ),
             Expanded(
-              child: Listener(
-                behavior: HitTestBehavior.translucent,
-                onPointerDown: _onLibraryPointerDown,
-                onPointerUp: _onLibraryPointerUp,
-                onPointerCancel: _onLibraryPointerCancel,
-                child: TabBarView(
-                  controller: _tabController,
-                  physics: const _LibraryTabScrollPhysics(),
-                  dragStartBehavior: DragStartBehavior.down,
-                  children: _visibleTabs.map(_pageForTab).toList(growable: false),
+              child: TabBarView(
+                controller: _tabController,
+                // Keep the native PageView gesture arena in charge. This lets
+                // vertical lists and horizontal shelves win their own drags,
+                // while a clear horizontal gesture moves between library pages.
+                physics: const PageScrollPhysics(
+                  parent: BouncingScrollPhysics(),
                 ),
+                dragStartBehavior: DragStartBehavior.down,
+                children: _visibleTabs.map(_pageForTab).toList(growable: false),
               ),
             ),
             const MiniPlayer(),
@@ -331,23 +298,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       LibraryTab.playlists => const LibraryPlaylistsTab(),
     };
   }
-}
-
-class _LibraryTabScrollPhysics extends PageScrollPhysics {
-  const _LibraryTabScrollPhysics({super.parent});
-
-  @override
-  double get minFlingDistance => 7;
-
-  @override
-  double get minFlingVelocity => 70;
-
-  @override
-  double get dragStartDistanceMotionThreshold => 2;
-
-  @override
-  _LibraryTabScrollPhysics applyTo(ScrollPhysics? ancestor) =>
-      _LibraryTabScrollPhysics(parent: buildParent(ancestor));
 }
 
 /// Flat "Tracks" tab, backed by [tracksPagingProvider] (FIX #1: a

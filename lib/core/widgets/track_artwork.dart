@@ -86,20 +86,35 @@ class _TrackArtworkState extends ConsumerState<TrackArtwork> {
 
   @override
   Widget build(BuildContext context) {
-    final radius = widget.borderRadius ?? BorderRadius.circular((widget.size ?? 64) / 5);
+    final radius =
+        widget.borderRadius ?? BorderRadius.circular((widget.size ?? 64) / 5);
 
     if (Scrollable.recommendDeferredLoadingForContext(context)) {
       _scheduleDeferredRetry();
       return _sized(radius, _placeholder(context));
     }
 
-    final art = ref
-        .watch(albumArtProvider((contentUri: widget.contentUri, size: widget.artSize, version: widget.version)));
+    final art = ref.watch(
+      albumArtProvider((
+        contentUri: widget.contentUri,
+        size: widget.artSize,
+        version: widget.version,
+      )),
+    );
 
     final child = art.when(
       data: (bytes) => bytes == null
           ? _placeholder(context)
-          : Image.memory(bytes, fit: BoxFit.cover),
+          : Image.memory(
+              bytes,
+              fit: BoxFit.cover,
+              // Decode close to the requested display size instead of keeping
+              // a full-resolution album cover for every scrolling row.
+              cacheWidth: widget.artSize,
+              cacheHeight: widget.artSize,
+              gaplessPlayback: true,
+              filterQuality: FilterQuality.low,
+            ),
       loading: () => _placeholder(context),
       error: (_, __) => _placeholder(context),
     );
@@ -108,11 +123,13 @@ class _TrackArtworkState extends ConsumerState<TrackArtwork> {
   }
 
   Widget _sized(BorderRadius radius, Widget child) {
-    return ClipRRect(
-      borderRadius: radius,
-      child: widget.size == null
-          ? SizedBox.expand(child: child)
-          : SizedBox(width: widget.size, height: widget.size, child: child),
+    return RepaintBoundary(
+      child: ClipRRect(
+        borderRadius: radius,
+        child: widget.size == null
+            ? SizedBox.expand(child: child)
+            : SizedBox(width: widget.size, height: widget.size, child: child),
+      ),
     );
   }
 

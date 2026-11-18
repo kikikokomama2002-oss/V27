@@ -33,7 +33,6 @@ abstract final class V27Palette {
   // Semantic colors are not brand accents.
   static const darkError = Color(0xFFFF6B7A);
   static const lightError = Color(0xFFBA2638);
-
 }
 
 abstract final class V27Spacing {
@@ -59,6 +58,41 @@ abstract final class V27Motion {
   static const curve = Curves.easeOutCubic;
 }
 
+/// Lightweight, consistent horizontal navigation motion for V27.
+/// Uses only compositor transforms/opacity; it does not animate layout.
+class V27SlidePageTransitionsBuilder extends PageTransitionsBuilder {
+  const V27SlidePageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+      return child;
+    }
+
+    final curved = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    final offset = Tween<Offset>(
+      begin: const Offset(0.045, 0),
+      end: Offset.zero,
+    ).animate(curved);
+    final opacity = Tween<double>(begin: 0, end: 1).animate(curved);
+
+    return SlideTransition(
+      position: offset,
+      child: FadeTransition(opacity: opacity, child: child),
+    );
+  }
+}
+
 class AppTheme {
   static final Map<Color, ThemeData> _darkThemeCache = <Color, ThemeData>{};
   static final Map<Color, ThemeData> _lightThemeCache = <Color, ThemeData>{};
@@ -67,23 +101,34 @@ class AppTheme {
       _darkThemeCache.putIfAbsent(accent, () => _buildAmoledDark(accent));
 
   static ThemeData _buildAmoledDark(Color accent) {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: accent,
-      brightness: Brightness.dark,
-    ).copyWith(
-      primary: accent,
-      onPrimary: const Color(0xFF062524),
-      secondary: V27Palette.silver,
-      onSecondary: V27Palette.midnight,
-      surface: V27Palette.darkSurface,
-      onSurface: V27Palette.darkText,
-      onSurfaceVariant: V27Palette.darkSecondaryText,
-      outline: V27Palette.darkBorder,
-      error: V27Palette.darkError,
-    );
+    final scheme =
+        ColorScheme.fromSeed(
+          seedColor: accent,
+          brightness: Brightness.dark,
+        ).copyWith(
+          primary: accent,
+          onPrimary: const Color(0xFF062524),
+          secondary: V27Palette.silver,
+          onSecondary: V27Palette.midnight,
+          surface: V27Palette.darkSurface,
+          onSurface: V27Palette.darkText,
+          onSurfaceVariant: V27Palette.darkSecondaryText,
+          outline: V27Palette.darkBorder,
+          error: V27Palette.darkError,
+        );
 
     return ThemeData(
       useMaterial3: true,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: V27SlidePageTransitionsBuilder(),
+          TargetPlatform.iOS: V27SlidePageTransitionsBuilder(),
+          TargetPlatform.linux: V27SlidePageTransitionsBuilder(),
+          TargetPlatform.macOS: V27SlidePageTransitionsBuilder(),
+          TargetPlatform.windows: V27SlidePageTransitionsBuilder(),
+          TargetPlatform.fuchsia: V27SlidePageTransitionsBuilder(),
+        },
+      ),
       brightness: Brightness.dark,
       colorScheme: scheme,
       scaffoldBackgroundColor: V27Palette.darkBackground,
@@ -167,23 +212,34 @@ class AppTheme {
       _lightThemeCache.putIfAbsent(accent, () => _buildLight(accent));
 
   static ThemeData _buildLight(Color accent) {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: accent,
-      brightness: Brightness.light,
-    ).copyWith(
-      primary: accent,
-      onPrimary: Colors.white,
-      secondary: V27Palette.lightSecondaryText,
-      onSecondary: Colors.white,
-      surface: V27Palette.lightSurface,
-      onSurface: V27Palette.lightText,
-      onSurfaceVariant: V27Palette.lightSecondaryText,
-      outline: V27Palette.lightBorder,
-      error: V27Palette.lightError,
-    );
+    final scheme =
+        ColorScheme.fromSeed(
+          seedColor: accent,
+          brightness: Brightness.light,
+        ).copyWith(
+          primary: accent,
+          onPrimary: Colors.white,
+          secondary: V27Palette.lightSecondaryText,
+          onSecondary: Colors.white,
+          surface: V27Palette.lightSurface,
+          onSurface: V27Palette.lightText,
+          onSurfaceVariant: V27Palette.lightSecondaryText,
+          outline: V27Palette.lightBorder,
+          error: V27Palette.lightError,
+        );
 
     return ThemeData(
       useMaterial3: true,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: V27SlidePageTransitionsBuilder(),
+          TargetPlatform.iOS: V27SlidePageTransitionsBuilder(),
+          TargetPlatform.linux: V27SlidePageTransitionsBuilder(),
+          TargetPlatform.macOS: V27SlidePageTransitionsBuilder(),
+          TargetPlatform.windows: V27SlidePageTransitionsBuilder(),
+          TargetPlatform.fuchsia: V27SlidePageTransitionsBuilder(),
+        },
+      ),
       brightness: Brightness.light,
       colorScheme: scheme,
       scaffoldBackgroundColor: V27Palette.lightBackground,
@@ -259,7 +315,6 @@ class AppTheme {
       ),
     );
   }
-
 
   /// Reused immutable theme objects; rebuilding MaterialApp must not
   /// regenerate both complete ThemeData trees on every mode switch.

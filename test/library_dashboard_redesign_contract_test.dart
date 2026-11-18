@@ -4,34 +4,52 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   final root = Directory.current.path;
-  final tabs = File('$root/lib/core/library_tab_settings.dart').readAsStringSync();
-  final screen = File('$root/lib/features/library/library_screen.dart').readAsStringSync();
-  final dashboard = File('$root/lib/features/library/library_dashboard.dart').readAsStringSync();
+  final tabs = File(
+    '$root/lib/core/library_tab_settings.dart',
+  ).readAsStringSync();
+  final screen = File(
+    '$root/lib/features/library/library_screen.dart',
+  ).readAsStringSync();
+  final dashboard = File(
+    '$root/lib/features/library/library_dashboard.dart',
+  ).readAsStringSync();
   final providers = File('$root/lib/core/providers.dart').readAsStringSync();
-  final repository = File('$root/lib/data/repositories/library_repository.dart').readAsStringSync();
+  final repository = File(
+    '$root/lib/data/repositories/library_repository.dart',
+  ).readAsStringSync();
 
-  test('Library opens on the dashboard and keeps all collection destinations', () {
-    expect(tabs, contains('home(\'Home\''));
-    expect(tabs, contains('tracks(\'Tracks\''));
-    expect(tabs, contains('albums(\'Albums\''));
-    expect(tabs, contains('artists(\'Artists\''));
-    expect(tabs, contains('folders(\'Folders\''));
-    expect(tabs, contains('playlists(\'Playlists\''));
-    expect(screen, contains('TabController(length: _visibleTabs.length'));
-    expect(screen, contains('LibraryTab.home => LibraryDashboard'));
-    expect(screen, contains('LibraryTab.playlists => const LibraryPlaylistsTab()'));
-  });
+  test(
+    'Library opens on the dashboard and keeps all collection destinations',
+    () {
+      expect(tabs, contains('home(\'Home\''));
+      expect(tabs, contains('tracks(\'Tracks\''));
+      expect(tabs, contains('albums(\'Albums\''));
+      expect(tabs, contains('artists(\'Artists\''));
+      expect(tabs, contains('folders(\'Folders\''));
+      expect(tabs, contains('playlists(\'Playlists\''));
+      expect(screen, contains('_tabController = TabController('));
+      expect(screen, contains('length: _visibleTabs.length'));
+      expect(screen, contains('LibraryTab.home => LibraryDashboard'));
+      expect(
+        screen,
+        contains('LibraryTab.playlists => const LibraryPlaylistsTab()'),
+      );
+    },
+  );
 
-  test('Dashboard contains local-library shelves matching the reference layout', () {
-    expect(dashboard, contains("text('speed_dial')"));
-    expect(dashboard, contains("text('quick_picks')"));
-    expect(dashboard, contains("text('albums_in_library')"));
-    expect(dashboard, contains("text('explore_artists')"));
-    expect(dashboard, contains("text('your_playlists')"));
-    expect(dashboard, contains("text('browse_folders')"));
-    expect(dashboard, contains('CustomScrollView('));
-    expect(dashboard, contains('ListView.builder('));
-  });
+  test(
+    'Dashboard contains local-library shelves matching the reference layout',
+    () {
+      expect(dashboard, contains("text('speed_dial')"));
+      expect(dashboard, contains("text('quick_picks')"));
+      expect(dashboard, contains("text('albums_in_library')"));
+      expect(dashboard, contains("text('explore_artists')"));
+      expect(dashboard, contains("text('your_playlists')"));
+      expect(dashboard, contains("text('browse_folders')"));
+      expect(dashboard, contains('CustomScrollView('));
+      expect(dashboard, contains('ListView.builder('));
+    },
+  );
 
   test('Dashboard queries are bounded and independent from Tracks search', () {
     expect(providers, contains('math.Random.secure()'));
