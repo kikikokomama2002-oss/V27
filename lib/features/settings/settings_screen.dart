@@ -14,6 +14,9 @@ import '../../core/playlist_store.dart';
 import '../../core/widgets/playlist_name_dialog.dart';
 import '../../core/widgets/track_artwork.dart';
 import '../../core/providers.dart';
+import '../../core/library_navigation.dart';
+import '../../core/library_tab_settings.dart';
+import '../../core/widgets/v27_bottom_navigation.dart';
 import '../../data/db/track.dart';
 import '../../playback/queue_spec.dart';
 
@@ -100,6 +103,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           SnackBar(content: Text(V27Strings.of(context).text('could_not_change_speed'))),
         );
       }
+    }
+  }
+
+  void _onBottomDestination(int index) {
+    switch (index) {
+      case 0:
+        ref.read(libraryTabSelectionProvider.notifier).state = LibraryTab.home;
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        break;
+      case 1:
+        ref.read(libraryTabSelectionProvider.notifier).state = LibraryTab.tracks;
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        break;
+      case 2:
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        Navigator.of(context).pushNamed('/now-playing');
+        break;
+      case 3:
+        break;
     }
   }
 
@@ -253,35 +275,68 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             }),
             Consumer(builder: (context, ref, _) {
               final selected = ref.watch(accentColorProvider);
-              return ListTile(
-                leading: const Icon(Icons.palette_outlined),
-                title: Text(strings.text('accent_color')),
-                subtitle: Text(strings.text('personalize_accent')),
-                trailing: DropdownButton<String>(
-                  value: selected,
-                  onChanged: (value) { if (value != null) ref.read(accentColorProvider.notifier).select(value); },
-                  items: accentOptions
-                      .map(
-                        (item) => DropdownMenuItem<String>(
-                          value: item.id,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.palette_outlined, color: Theme.of(context).colorScheme.primary),
+                        const SizedBox(width: 13),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
-                                width: 14,
-                                height: 14,
-                                decoration: BoxDecoration(
-                                  color: isDark ? item.darkColor : item.lightColor,
-                                  shape: BoxShape.circle,
-                                ),
+                              Text(strings.text('accent_color'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                              const SizedBox(height: 2),
+                              Text(
+                                strings.text('accent_${selected}'),
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
                               ),
-                              const SizedBox(width: 8),
-                              Text(V27Strings.of(context).text('accent_${item.id}')),
                             ],
                           ),
                         ),
-                      )
-                      .toList(),
+                      ],
+                    ),
+                    const SizedBox(height: 15),
+                    Wrap(
+                      spacing: 15,
+                      runSpacing: 12,
+                      children: accentOptions.map((option) {
+                        final color = isDark ? option.darkColor : option.lightColor;
+                        final active = selected == option.id;
+                        final label = strings.text('accent_${option.id}');
+                        return Tooltip(
+                          message: label,
+                          child: Semantics(
+                            button: true,
+                            selected: active,
+                            label: label,
+                            child: InkWell(
+                              onTap: () => ref.read(accentColorProvider.notifier).select(option.id),
+                              customBorder: const CircleBorder(),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 160),
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: active ? Theme.of(context).colorScheme.onSurface : Colors.transparent,
+                                    width: active ? 2.2 : 0,
+                                  ),
+                                  boxShadow: active ? [BoxShadow(color: color.withValues(alpha: 0.34), blurRadius: 10, spreadRadius: 1)] : const [],
+                                ),
+                                child: active ? Icon(Icons.check_rounded, color: isDark ? V27Palette.midnight : Colors.white, size: 21) : null,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(growable: false),
+                    ),
+                  ],
                 ),
               );
             }),
@@ -351,6 +406,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
         ],
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: V27BottomNavigation(
+          selectedIndex: 3,
+          onDestinationSelected: _onBottomDestination,
+        ),
       ),
     );
   }

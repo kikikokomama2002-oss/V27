@@ -15,7 +15,8 @@ import '../../data/repositories/library_repository.dart';
 import '../../playback/queue_spec.dart';
 import '../../playback/player_channel.dart';
 import '../player/mini_player.dart';
-import '../settings/settings_screen.dart';
+import '../../core/library_navigation.dart';
+import '../../core/widgets/v27_bottom_navigation.dart';
 import 'library_dashboard.dart';
 
 /// Main library surface. The Home tab is a vertically-scrolling, local-data
@@ -42,11 +43,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     super.initState();
     _searchFocusNode = FocusNode();
     _searchController = TextEditingController(text: ref.read(searchQueryProvider));
+    final initialTab = ref.read(libraryTabSelectionProvider);
+    final initialIndex = _visibleTabs.indexOf(initialTab);
     _tabController = TabController(
       length: _visibleTabs.length,
+      initialIndex: initialIndex < 0 ? 0 : initialIndex,
       vsync: this,
       animationDuration: const Duration(milliseconds: 280),
     )..addListener(_handleTabChange);
+    _selectedTabIndex = _tabController.index;
     _searchDebounce = Debouncer(const Duration(milliseconds: 250));
   }
 
@@ -57,6 +62,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     final nextIndex = _tabController.index;
     if (nextIndex == _selectedTabIndex) return;
     _selectedTabIndex = nextIndex;
+    ref.read(libraryTabSelectionProvider.notifier).state = _visibleTabs[nextIndex];
 
     if (_visibleTabs[nextIndex] != LibraryTab.tracks) {
       _searchFocusNode.unfocus();
@@ -66,6 +72,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
   void _selectTab(LibraryTab tab) {
     final index = _visibleTabs.indexOf(tab);
+    if (index >= 0) {
+      ref.read(libraryTabSelectionProvider.notifier).state = tab;
+    }
     if (index >= 0 && index != _tabController.index) {
       _tabController.animateTo(
         index,
@@ -107,56 +116,64 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     final theme = Theme.of(context);
     final strings = V27Strings.of(context);
     final searchQuery = ref.watch(searchQueryProvider);
-    final isTracksTab = _visibleTabs[_tabController.index] == LibraryTab.tracks;
-    final hour = DateTime.now().hour;
-    final greeting = hour < 12
-        ? strings.text('good_morning')
-        : hour < 17
-            ? strings.text('good_afternoon')
-            : strings.text('good_evening');
+    ref.listen<LibraryTab>(libraryTabSelectionProvider, (previous, next) {
+      final index = _visibleTabs.indexOf(next);
+      if (index >= 0 && index != _tabController.index) {
+        _tabController.animateTo(
+          index,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
+    final selectedTab = _visibleTabs[_selectedTabIndex];
+    final isTracksTab = selectedTab == LibraryTab.tracks;
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(19, 13, 12, 9),
+              padding: const EdgeInsets.fromLTRB(17, 8, 10, 10),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(13),
+                    child: Image.asset(
+                      'assets/v27_icon.png',
+                      width: 42,
+                      height: 42,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(width: 11),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          greeting,
-                          style: theme.textTheme.labelLarge?.copyWith(
+                          'V27 PULSE',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.15,
+                            height: 1.1,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          selectedTab == LibraryTab.home
+                              ? strings.text('your_music')
+                              : selectedTab.localizedLabel(context),
+                          style: theme.textTheme.labelSmall?.copyWith(
                             color: theme.colorScheme.primary,
                             fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          strings.text('your_music'),
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -1.1,
-                            height: 1.04,
-                          ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          strings.text('offline_library'),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.0,
+                            letterSpacing: 1.1,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  IconButton.filledTonal(
+                  IconButton(
                     tooltip: strings.text('search_tracks'),
                     visualDensity: VisualDensity.compact,
                     onPressed: () {
@@ -165,27 +182,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                         if (mounted) _searchFocusNode.requestFocus();
                       });
                     },
-                    icon: const Icon(Icons.search_rounded, size: 20),
+                    icon: const Icon(Icons.search_rounded, size: 22),
                   ),
-                  const SizedBox(width: 3),
-                  IconButton.filledTonal(
+                  IconButton(
                     tooltip: strings.text('rescan_library'),
                     visualDensity: VisualDensity.compact,
                     onPressed: _manualRescan,
-                    icon: const Icon(Icons.refresh_rounded, size: 20),
+                    icon: const Icon(Icons.sync_rounded, size: 21),
                   ),
-                  const SizedBox(width: 3),
-                  IconButton.filledTonal(
-                    tooltip: strings.text('settings'),
+                  IconButton(
+                    tooltip: strings.text('equalizer'),
                     visualDensity: VisualDensity.compact,
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const SettingsScreen(),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.tune_rounded, size: 20),
+                    onPressed: () => Navigator.of(context).pushNamed('/equalizer'),
+                    icon: const Icon(Icons.graphic_eq_rounded, size: 21),
                   ),
                 ],
               ),
@@ -210,7 +219,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                 labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
                 unselectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                 labelPadding: const EdgeInsets.symmetric(horizontal: 13),
-                tabs: _visibleTabs.map((tab) => Tab(text: tab.localizedLabel(context))).toList(growable: false),
+                tabs: _visibleTabs
+                    .map((tab) => Tab(text: tab.localizedLabel(context)))
+                    .toList(growable: false),
               ),
             ),
             if (isTracksTab)
@@ -258,9 +269,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             Expanded(
               child: TabBarView(
                 controller: _tabController,
-                // Keep the native PageView gesture arena in charge. This lets
-                // vertical lists and horizontal shelves win their own drags,
-                // while a clear horizontal gesture moves between library pages.
                 physics: const PageScrollPhysics(
                   parent: BouncingScrollPhysics(),
                 ),
@@ -268,7 +276,34 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                 children: _visibleTabs.map(_pageForTab).toList(growable: false),
               ),
             ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
             const MiniPlayer(),
+            V27BottomNavigation(
+              selectedIndex: _selectedTabIndex == 0 ? 0 : 1,
+              onDestinationSelected: (index) {
+                switch (index) {
+                  case 0:
+                    _selectTab(LibraryTab.home);
+                    break;
+                  case 1:
+                    _selectTab(LibraryTab.tracks);
+                    break;
+                  case 2:
+                    Navigator.of(context).pushNamed('/now-playing');
+                    break;
+                  case 3:
+                    Navigator.of(context).pushNamed('/settings');
+                    break;
+                }
+              },
+            ),
           ],
         ),
       ),
@@ -340,36 +375,114 @@ class _TracksTabState extends ConsumerState<_TracksTab> {
         ? const AllTracksQueueSpec()
         : SearchQueueSpec(query);
 
-    return ListView.builder(
-      itemCount: totalCount,
-      itemBuilder: (context, index) {
-        final track = notifier.itemAt(index);
-        if (track == null) {
-          final error = notifier.pageErrorAt(index);
-          if (error != null) {
-            return _PagingPageError(
-              onRetry: () => notifier.retryPage(index ~/ notifier.pageSize),
-            );
-          }
-          return const _LoadingRow();
-        }
-        return _TrackTile(
-          track: track,
-          // FIX #2: the queue this hands off to native describes the
-          // COMPLETE logical query (all tracks / this search) plus a
-          // logical start index — not just whatever page happens to be
-          // loaded in `notifier` right now. Next/Previous work across
-          // the full result set; see PlaybackController.playQueue.
-          onTap: () => ref
-              .read(playbackControllerProvider.notifier)
-              .playQueue(
-                spec,
-                startIndex: index,
-                startVolume: track.mediaStoreVolume,
-                startMediaStoreId: track.mediaStoreId,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.45),
               ),
-        );
-      },
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.13),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Icon(
+                    Icons.library_music_rounded,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        query.isEmpty
+                            ? V27Strings.of(context).text('offline_library')
+                            : V27Strings.of(context).text('search'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        query.isEmpty
+                            ? V27Strings.of(context).text('all_tracks')
+                            : query,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '$totalCount',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.8,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  V27Strings.of(context).text(totalCount == 1 ? 'song' : 'songs'),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: totalCount,
+            itemBuilder: (context, index) {
+              final track = notifier.itemAt(index);
+              if (track == null) {
+                final error = notifier.pageErrorAt(index);
+                if (error != null) {
+                  return _PagingPageError(
+                    onRetry: () => notifier.retryPage(index ~/ notifier.pageSize),
+                  );
+                }
+                return const _LoadingRow();
+              }
+              return _TrackTile(
+                track: track,
+                // The queue represents the complete logical query, not only
+                // the rows currently resident in the paging window.
+                onTap: () => ref
+                    .read(playbackControllerProvider.notifier)
+                    .playQueue(
+                      spec,
+                      startIndex: index,
+                      startVolume: track.mediaStoreVolume,
+                      startMediaStoreId: track.mediaStoreId,
+                    ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

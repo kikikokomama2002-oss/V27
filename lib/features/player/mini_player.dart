@@ -5,7 +5,6 @@ import '../../core/providers.dart';
 import '../../core/localization.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/track_artwork.dart';
-import 'now_playing_screen.dart';
 
 /// Persistent V27 PULSE playback bar.
 /// Track metadata is isolated from the 500ms playback-state stream.
@@ -23,9 +22,7 @@ class MiniPlayer extends ConsumerWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const NowPlayingScreen()),
-        ),
+        onTap: () => Navigator.of(context).pushNamed('/now-playing'),
         child: Container(
           decoration: BoxDecoration(
             color: isDark ? V27Palette.darkSurface : theme.colorScheme.surface,

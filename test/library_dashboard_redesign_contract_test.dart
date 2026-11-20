@@ -78,7 +78,8 @@ void main() {
   test('Existing Library safety-critical controls remain mounted', () {
     expect(screen, contains('_manualRescan'));
     expect(screen, contains('const MiniPlayer()'));
-    expect(screen, contains('SettingsScreen()'));
+    expect(screen, contains("pushNamed('/settings')"));
+    expect(screen, contains('V27BottomNavigation('));
     expect(screen, contains('tracksPagingProvider'));
     expect(screen, contains('groupsPagingProvider'));
     expect(screen, contains('searchQueryProvider'));

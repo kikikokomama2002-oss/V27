@@ -4,8 +4,12 @@ import 'package:flutter/services.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/providers.dart';
+import '../../core/library_navigation.dart';
+import '../../core/library_tab_settings.dart';
+import '../../core/widgets/v27_bottom_navigation.dart';
 import '../../core/playlist_store.dart';
 import '../../core/widgets/playlist_name_dialog.dart';
 import '../../core/theme.dart';
@@ -30,7 +34,117 @@ class NowPlayingScreen extends ConsumerStatefulWidget {
 }
 
 class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
+  static const _speedPreferenceKey = 'v27_playback_speed_v1';
+  static const _speeds = <double>[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+
   _NowPlayingView _view = _NowPlayingView.cover;
+  bool _repeatCurrent = false;
+  bool _repeatLoaded = false;
+  bool _repeatSaving = false;
+  double _speed = 1.0;
+  bool _speedLoaded = false;
+  bool _speedSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPlaybackOptions();
+  }
+
+  Future<void> _loadPlaybackOptions() async {
+    try {
+      final values = await Future.wait<Object>([
+        PlayerChannel.instance.getRepeatCurrentTrackEnabled(),
+        SharedPreferences.getInstance(),
+      ]);
+      final prefs = values[1] as SharedPreferences;
+      final savedSpeed = prefs.getDouble(_speedPreferenceKey) ?? 1.0;
+      final selectedSpeed = _speeds.reduce(
+        (a, b) => (a - savedSpeed).abs() <= (b - savedSpeed).abs() ? a : b,
+      );
+      try {
+        await PlayerChannel.instance.setPlaybackSpeed(selectedSpeed);
+      } catch (_) {
+        // Keep the stored choice visible; the settings surface reports
+        // playback-speed failures when the user changes it manually.
+      }
+      if (!mounted) return;
+      setState(() {
+        _repeatCurrent = values[0] as bool;
+        _repeatLoaded = true;
+        _speed = selectedSpeed;
+        _speedLoaded = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _repeatLoaded = true;
+        _speedLoaded = true;
+      });
+    }
+  }
+
+  Future<void> _toggleRepeat(bool enabled) async {
+    if (_repeatSaving || !_repeatLoaded) return;
+    final previous = _repeatCurrent;
+    setState(() {
+      _repeatCurrent = enabled;
+      _repeatSaving = true;
+    });
+    try {
+      await PlayerChannel.instance.setRepeatCurrentTrackEnabled(enabled);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _repeatCurrent = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(V27Strings.of(context).text('could_not_update_repeat'))),
+      );
+    } finally {
+      if (mounted) setState(() => _repeatSaving = false);
+    }
+  }
+
+  Future<void> _changeSpeed(double speed) async {
+    if (_speedSaving || !_speedLoaded || speed == _speed) return;
+    final previous = _speed;
+    setState(() {
+      _speed = speed;
+      _speedSaving = true;
+    });
+    try {
+      await PlayerChannel.instance.setPlaybackSpeed(speed);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_speedPreferenceKey, speed);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _speed = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(V27Strings.of(context).text('could_not_change_speed'))),
+      );
+    } finally {
+      if (mounted) setState(() => _speedSaving = false);
+    }
+  }
+
+  void _onBottomDestination(int index) {
+    switch (index) {
+      case 0:
+        ref.read(libraryTabSelectionProvider.notifier).state = LibraryTab.home;
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        break;
+      case 1:
+        ref.read(libraryTabSelectionProvider.notifier).state = LibraryTab.tracks;
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        break;
+      case 2:
+        break;
+      case 3:
+        Navigator.of(context).pushNamed('/settings').then((_) {
+          if (mounted) _loadPlaybackOptions();
+        });
+        break;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -112,7 +226,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 builder: (context, constraints) {
                   final artworkSize = math.min(
                     constraints.maxWidth - 48,
-                    constraints.maxHeight * 0.43,
+                    constraints.maxHeight * 0.31,
                   ).clamp(150.0, 360.0).toDouble();
 
                   return Padding(
@@ -126,7 +240,18 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                           height: artworkSize,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(28),
+                            border: Border.all(
+                              color: theme.colorScheme.primary.withValues(alpha: 0.20),
+                              width: 1,
+                            ),
                             boxShadow: [
+                              BoxShadow(
+                                color: theme.colorScheme.primary.withValues(
+                                  alpha: isDark ? 0.12 : 0.07,
+                                ),
+                                blurRadius: 30,
+                                spreadRadius: 1,
+                              ),
                               BoxShadow(
                                 color: Colors.black.withValues(
                                   alpha: isDark ? 0.22 : 0.09,
@@ -200,6 +325,16 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                             ],
                           ],
                         ),
+                        TextButton.icon(
+                          onPressed: () => _handleNowPlayingTrackAction(
+                            context,
+                            ref,
+                            track,
+                            'add_to_playlist',
+                          ),
+                          icon: const Icon(Icons.playlist_add_rounded, size: 18),
+                          label: Text(strings.text('add_to_playlist')),
+                        ),
                         const _NowPlayingProgress(),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -230,8 +365,18 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                             ),
                           ],
                         ),
+                        _PlaybackUtilityRow(
+                          repeatCurrent: _repeatCurrent,
+                          repeatLoaded: _repeatLoaded && !_repeatSaving,
+                          speed: _speed,
+                          speedLoaded: _speedLoaded && !_speedSaving,
+                          onRepeatChanged: _toggleRepeat,
+                          onSpeedSelected: _changeSpeed,
+                          onEqualizer: () => Navigator.of(context).pushNamed('/equalizer'),
+                        ),
                         _NowPlayingPanelControls(
                           view: _view,
+                          onSong: () => setState(() => _view = _NowPlayingView.cover),
                           onLyrics: () => setState(() => _view = _NowPlayingView.lyrics),
                           onQueue: () => setState(() => _view = _NowPlayingView.queue),
                         ),
@@ -258,8 +403,18 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                           IconButton(onPressed: controller.next, icon: const Icon(Icons.skip_next_rounded), iconSize: 30),
                           IconButton(tooltip: strings.text('sleep_timer'), onPressed: () => showSleepTimerSheet(context), icon: const Icon(Icons.bedtime_outlined)),
                         ]),
+                        _PlaybackUtilityRow(
+                          repeatCurrent: _repeatCurrent,
+                          repeatLoaded: _repeatLoaded && !_repeatSaving,
+                          speed: _speed,
+                          speedLoaded: _speedLoaded && !_speedSaving,
+                          onRepeatChanged: _toggleRepeat,
+                          onSpeedSelected: _changeSpeed,
+                          onEqualizer: () => Navigator.of(context).pushNamed('/equalizer'),
+                        ),
                         _NowPlayingPanelControls(
                           view: _view,
+                          onSong: () => setState(() => _view = _NowPlayingView.cover),
                           onLyrics: () => setState(() => _view = _view == _NowPlayingView.lyrics ? _NowPlayingView.cover : _NowPlayingView.lyrics),
                           onQueue: () => setState(() => _view = _view == _NowPlayingView.queue ? _NowPlayingView.cover : _NowPlayingView.queue),
                         ),
@@ -269,10 +424,157 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 },
               ),
       ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: V27BottomNavigation(
+          selectedIndex: 2,
+          onDestinationSelected: _onBottomDestination,
+        ),
+      ),
     );
   }
 }
 
+
+class _PlaybackUtilityRow extends StatelessWidget {
+  const _PlaybackUtilityRow({
+    required this.repeatCurrent,
+    required this.repeatLoaded,
+    required this.speed,
+    required this.speedLoaded,
+    required this.onRepeatChanged,
+    required this.onSpeedSelected,
+    required this.onEqualizer,
+  });
+
+  final bool repeatCurrent;
+  final bool repeatLoaded;
+  final double speed;
+  final bool speedLoaded;
+  final ValueChanged<bool> onRepeatChanged;
+  final ValueChanged<double> onSpeedSelected;
+  final VoidCallback onEqualizer;
+
+  static const _speeds = <double>[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = V27Strings.of(context);
+    final theme = Theme.of(context);
+    final selectedColor = theme.colorScheme.primary;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: _UtilityAction(
+            icon: Icons.repeat_one_rounded,
+            label: strings.text('repeat_current'),
+            selected: repeatCurrent,
+            enabled: repeatLoaded,
+            onTap: () => onRepeatChanged(!repeatCurrent),
+          ),
+        ),
+        Expanded(
+          child: PopupMenuButton<double>(
+            enabled: speedLoaded,
+            tooltip: strings.text('play_speed'),
+            onSelected: onSpeedSelected,
+            itemBuilder: (context) => _speeds.map((value) => PopupMenuItem<double>(
+              value: value,
+              child: Row(
+                children: [
+                  SizedBox(width: 54, child: Text('${value.toString()}x')),
+                  if (value == speed) Icon(Icons.check_rounded, color: selectedColor, size: 18),
+                ],
+              ),
+            )).toList(growable: false),
+            child: _UtilityActionContent(
+              icon: Icons.speed_rounded,
+              label: strings.text('play_speed'),
+              value: speedLoaded ? '${speed.toString()}x' : strings.text('loading'),
+              selected: false,
+            ),
+          ),
+        ),
+        Expanded(
+          child: _UtilityAction(
+            icon: Icons.equalizer_rounded,
+            label: strings.text('equalizer'),
+            selected: false,
+            enabled: true,
+            onTap: onEqualizer,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _UtilityAction extends StatelessWidget {
+  const _UtilityAction({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    child: InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(14),
+      child: _UtilityActionContent(icon: icon, label: label, selected: selected),
+    ),
+  );
+}
+
+class _UtilityActionContent extends StatelessWidget {
+  const _UtilityActionContent({
+    required this.icon,
+    required this.label,
+    this.value,
+    required this.selected,
+  });
+
+  final IconData icon;
+  final String label;
+  final String? value;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = selected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 2),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 21, color: color),
+          const SizedBox(height: 4),
+          Text(
+            value ?? label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: color,
+              fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+            ),
+          ),
+          if (value != null) Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelSmall?.copyWith(fontSize: 9, color: theme.colorScheme.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
+}
 
 class _NowPlayingMenuLabel extends StatelessWidget {
   const _NowPlayingMenuLabel({required this.icon, required this.label});
@@ -287,34 +589,81 @@ class _NowPlayingMenuLabel extends StatelessWidget {
 }
 
 class _NowPlayingPanelControls extends StatelessWidget {
-  const _NowPlayingPanelControls({required this.view, required this.onLyrics, required this.onQueue});
+  const _NowPlayingPanelControls({
+    required this.view,
+    required this.onSong,
+    required this.onLyrics,
+    required this.onQueue,
+  });
+
   final _NowPlayingView view;
+  final VoidCallback onSong;
   final VoidCallback onLyrics;
   final VoidCallback onQueue;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    Widget control({required IconData icon, required String label, required bool selected, required VoidCallback onTap}) {
-      return Expanded(child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: FilledButton.tonalIcon(
-          onPressed: onTap,
-          icon: Icon(icon, size: 18),
-          label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-          style: FilledButton.styleFrom(
-            backgroundColor: selected ? theme.colorScheme.primary.withValues(alpha: .18) : theme.colorScheme.surfaceContainerHighest.withValues(alpha: .55),
-            foregroundColor: selected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: selected ? theme.colorScheme.primary.withValues(alpha: .38) : theme.colorScheme.outlineVariant.withValues(alpha: .45))),
+
+    Widget control({
+      required IconData icon,
+      required String label,
+      required bool selected,
+      required VoidCallback onTap,
+    }) {
+      return Expanded(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3),
+          child: FilledButton.tonalIcon(
+            onPressed: onTap,
+            icon: Icon(icon, size: 17),
+            label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+            style: FilledButton.styleFrom(
+              backgroundColor: selected
+                  ? theme.colorScheme.primary.withValues(alpha: .18)
+                  : theme.colorScheme.surfaceContainerHighest.withValues(alpha: .55),
+              foregroundColor: selected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurfaceVariant,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 10),
+              textStyle: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+                side: BorderSide(
+                  color: selected
+                      ? theme.colorScheme.primary.withValues(alpha: .38)
+                      : theme.colorScheme.outlineVariant.withValues(alpha: .45),
+                ),
+              ),
+            ),
           ),
         ),
-      ));
+      );
     }
-    return Row(children: [
-      control(icon: Icons.lyrics_rounded, label: V27Strings.of(context).text('lyrics'), selected: view == _NowPlayingView.lyrics, onTap: onLyrics),
-      control(icon: Icons.queue_music_rounded, label: V27Strings.of(context).text('whats_next'), selected: view == _NowPlayingView.queue, onTap: onQueue),
-    ]);
+
+    return Row(
+      children: [
+        control(
+          icon: Icons.album_rounded,
+          label: V27Strings.of(context).text('song'),
+          selected: view == _NowPlayingView.cover,
+          onTap: onSong,
+        ),
+        control(
+          icon: Icons.lyrics_rounded,
+          label: V27Strings.of(context).text('lyrics'),
+          selected: view == _NowPlayingView.lyrics,
+          onTap: onLyrics,
+        ),
+        control(
+          icon: Icons.queue_music_rounded,
+          label: V27Strings.of(context).text('whats_next'),
+          selected: view == _NowPlayingView.queue,
+          onTap: onQueue,
+        ),
+      ],
+    );
   }
 }
 

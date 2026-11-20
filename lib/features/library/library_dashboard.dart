@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/playlist_store.dart';
 import '../../core/localization.dart';
 import '../../core/providers.dart';
+import '../../core/theme.dart';
 import '../../core/widgets/playlist_name_dialog.dart';
 import '../../core/widgets/track_artwork.dart';
 import '../../data/db/track.dart';
@@ -127,6 +128,10 @@ class LibraryDashboard extends ConsumerWidget {
           delegate: SliverChildListDelegate([
             _ScrollRevealSection(
               index: 0,
+              child: _HomeHeroSection(trackCount: trackCount),
+            ),
+            _ScrollRevealSection(
+              index: 1,
               child: _SpeedDialSection(
                 trackCount: trackCount,
                 albumCount: albumsState.totalCount,
@@ -136,14 +141,14 @@ class LibraryDashboard extends ConsumerWidget {
               ),
             ),
             _ScrollRevealSection(
-              index: 1,
+              index: 2,
               child: _QuickPicksSection(
                 onSelectAll: () => onSelectTab(LibraryTab.tracks),
                 onTrackAction: onTrackAction,
               ),
             ),
             _ScrollRevealSection(
-              index: 2,
+              index: 3,
               child: _DashboardGroupShelf(
                 title: V27Strings.of(context).text('albums_in_library'),
                 field: GroupField.album,
@@ -154,7 +159,7 @@ class LibraryDashboard extends ConsumerWidget {
               ),
             ),
             _ScrollRevealSection(
-              index: 3,
+              index: 4,
               child: _DashboardGroupShelf(
                 title: V27Strings.of(context).text('explore_artists'),
                 field: GroupField.artist,
@@ -165,14 +170,14 @@ class LibraryDashboard extends ConsumerWidget {
               ),
             ),
             _ScrollRevealSection(
-              index: 4,
+              index: 5,
               child: _DashboardPlaylistsShelf(
                 playlistState: playlistState,
                 onSeeAll: () => onSelectTab(LibraryTab.playlists),
               ),
             ),
             _ScrollRevealSection(
-              index: 5,
+              index: 6,
               child: _DashboardGroupShelf(
                 title: V27Strings.of(context).text('browse_folders'),
                 field: GroupField.folder,
@@ -186,6 +191,109 @@ class LibraryDashboard extends ConsumerWidget {
         ),
         const SliverToBoxAdapter(child: SizedBox(height: 22)),
       ],
+    );
+  }
+}
+
+class _HomeHeroSection extends StatelessWidget {
+  const _HomeHeroSection({required this.trackCount});
+
+  final int? trackCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final strings = V27Strings.of(context);
+    final hour = DateTime.now().hour;
+    final greeting = hour < 12
+        ? strings.text('good_morning')
+        : hour < 17
+            ? strings.text('good_afternoon')
+            : strings.text('good_evening');
+    final countLabel = trackCount == null
+        ? strings.text('loading')
+        : '${trackCount!} ${strings.text(trackCount == 1 ? 'song' : 'songs')}';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 5),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(19),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: theme.brightness == Brightness.dark
+                ? [
+                    V27Palette.midnight,
+                    Color.lerp(theme.colorScheme.primary, V27Palette.midnight, 0.72)!,
+                  ]
+                : [
+                    Color.lerp(theme.colorScheme.primary, Colors.white, 0.86)!,
+                    V27Palette.lightSurfaceElevated,
+                  ],
+          ),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: theme.colorScheme.primary.withValues(alpha: 0.22),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              greeting,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              strings.text('your_music'),
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.7,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Container(
+                  width: 29,
+                  height: 29,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(
+                    Icons.graphic_eq_rounded,
+                    size: 17,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    strings.text('offline_library'),
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.35,
+                    ),
+                  ),
+                ),
+                Text(
+                  countLabel,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -836,14 +944,14 @@ class _DashboardGroupCard extends ConsumerWidget {
   }
 }
 
-class _DashboardPlaylistsShelf extends StatelessWidget {
+class _DashboardPlaylistsShelf extends ConsumerWidget {
   const _DashboardPlaylistsShelf({required this.playlistState, required this.onSeeAll});
 
   final PlaylistStoreState playlistState;
   final VoidCallback onSeeAll;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     if (playlistState.isLoading) return const SizedBox.shrink();
     if (playlistState.playlists.isEmpty) {
@@ -854,7 +962,7 @@ class _DashboardPlaylistsShelf extends StatelessWidget {
           borderRadius: BorderRadius.circular(18),
           child: InkWell(
             borderRadius: BorderRadius.circular(18),
-            onTap: () => onSeeAll(),
+            onTap: () => _createPlaylist(context, ref),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -893,7 +1001,46 @@ class _DashboardPlaylistsShelf extends StatelessWidget {
               onAction: onSeeAll,
             ),
           ),
-          const SizedBox(height: 11),
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: Material(
+              color: theme.colorScheme.primary.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(15),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(15),
+                onTap: () => _createPlaylist(context, ref),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.playlist_add_rounded, color: theme.colorScheme.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              V27Strings.of(context).text('create_playlist'),
+                              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            Text(
+                              V27Strings.of(context).text('create_playlist_prompt'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right_rounded, color: theme.colorScheme.primary),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           SizedBox(
             height: 194,
             child: ListView.builder(

@@ -10,6 +10,9 @@ import 'core/theme_mode_provider.dart';
 import 'core/accent_color_provider.dart';
 import 'core/localization.dart';
 import 'features/library/library_screen.dart';
+import 'features/player/now_playing_screen.dart';
+import 'features/settings/settings_screen.dart';
+import 'features/equalizer/equalizer_screen.dart';
 
 // MobileAds.instance.initialize() removed for the pure offline MVP
 // release — see lib/ads_iap/README.md to reintroduce.
@@ -38,6 +41,11 @@ class OfflineMusicPlayerApp extends ConsumerWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       debugShowCheckedModeBanner: false,
+      routes: {
+        '/now-playing': (_) => const NowPlayingScreen(),
+        '/settings': (_) => const SettingsScreen(),
+        '/equalizer': (_) => const EqualizerScreen(),
+      },
       theme: AppTheme.light(accent: accent.lightColor),
       darkTheme: AppTheme.amoledDark(accent: accent.darkColor),
       themeMode: themeMode,
